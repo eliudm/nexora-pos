@@ -14,6 +14,8 @@ import { customerQueries, Customer } from '../../src/db/customers';
 import { getBusinessInfo } from '../../src/db/settings';
 import { useSession } from '../../src/context/session';
 import { etimsService } from '../../src/services/etims';
+import { printerService } from '../../src/services/printer';
+import { buildReceiptText, buildReceiptHtml, ReceiptSale } from '../../src/services/receipt';
 import { brand } from '../../src/theme';
 
 const PAYMENT_METHODS = ['CASH', 'MPESA', 'CREDIT'] as const;
@@ -143,46 +145,73 @@ export default function POSScreen() {
     setTimeout(() => { lastScanRef.current = ''; }, 2000);
   };
 
-  // Receipt printing
+  // Receipt printing — tries thermal printer first, falls back to system print/PDF share
   const printReceipt = async (sale: any) => {
     if (!bizInfo) return;
-    const itemRows = (sale.items ?? []).map((i: CartItem) =>
-      `<tr><td>${i.product_name}</td><td style="text-align:center">${i.qty}</td><td style="text-align:right">KES ${i.total.toFixed(0)}</td></tr>`
-    ).join('');
 
-    const html = `
-      <html><body style="font-family:monospace;max-width:300px;margin:0 auto;padding:16px">
-        <h2 style="text-align:center;margin:0">${bizInfo.name}</h2>
-        <p style="text-align:center;margin:4px 0;font-size:12px">${bizInfo.phone ?? ''}</p>
-        <p style="text-align:center;margin:4px 0;font-size:12px">${bizInfo.address ?? ''}</p>
-        ${bizInfo.vatNo ? `<p style="text-align:center;font-size:12px">PIN: ${bizInfo.vatNo}</p>` : ''}
-        <hr/>
-        <p style="font-size:12px">Invoice: ${sale.invoice_no}</p>
-        <p style="font-size:12px">Date: ${dayjs(sale.created_at).format('D MMM YYYY HH:mm')}</p>
-        ${sale.customer_name ? `<p style="font-size:12px">Customer: ${sale.customer_name}</p>` : ''}
-        ${sale.cashier_name ? `<p style="font-size:12px">Cashier: ${sale.cashier_name}</p>` : ''}
-        <hr/>
-        <table style="width:100%;font-size:12px">
-          <thead><tr><th style="text-align:left">Item</th><th>Qty</th><th style="text-align:right">Total</th></tr></thead>
-          <tbody>${itemRows}</tbody>
-        </table>
-        <hr/>
-        <table style="width:100%;font-size:12px">
-          <tr><td>Subtotal</td><td style="text-align:right">KES ${sale.subtotal.toFixed(0)}</td></tr>
-          <tr><td>VAT (16%)</td><td style="text-align:right">KES ${sale.tax_amount.toFixed(0)}</td></tr>
-          ${sale.discount > 0 ? `<tr><td>Discount</td><td style="text-align:right">-KES ${sale.discount}</td></tr>` : ''}
-          <tr><td><b>TOTAL</b></td><td style="text-align:right"><b>KES ${sale.total.toFixed(0)}</b></td></tr>
-          <tr><td>Payment</td><td style="text-align:right">${sale.payment_method}</td></tr>
-          ${sale.mpesa_ref ? `<tr><td>M-Pesa Ref</td><td style="text-align:right">${sale.mpesa_ref}</td></tr>` : ''}
-        </table>
-        <hr/>
-        <p style="text-align:center;font-size:11px">${bizInfo.receiptFooter ?? 'Thank you for your business!'}</p>
-      </body></html>
-    `;
+    const receiptSale: ReceiptSale = {
+      invoice_no: sale.invoice_no,
+      created_at: sale.created_at,
+      customer_name: sale.customer_name,
+      cashier_name: sale.cashier_name,
+      subtotal: sale.subtotal,
+      tax_amount: sale.tax_amount,
+      discount: sale.discount,
+      total: sale.total,
+      payment_method: sale.payment_method,
+      mpesa_ref: sale.mpesa_ref,
+      items: sale.items ?? [],
+    };
 
-    Alert.alert('Receipt', 'What would you like to do?', [
-      { text: 'Print', onPress: async () => { await Print.printAsync({ html }); } },
-      { text: 'Share PDF', onPress: async () => {
+    const printerConfig = await printerService.getConfig();
+
+    // If a thermal printer is configured, try it first
+    if (printerConfig.type !== 'none') {
+      const text = buildReceiptText(receiptSale, {
+        name: bizInfo.name ?? '',
+        phone: bizInfo.phone,
+        address: bizInfo.address,
+        vatNo: bizInfo.vatNo,
+        receiptFooter: bizInfo.receiptFooter,
+        mpesaPaybill: bizInfo.mpesaPaybill,
+        mpesaTill: bizInfo.mpesaTill,
+      });
+
+      const result = await printerService.print(text);
+
+      if (result.success) return; // printed — done
+
+      // Printer failed — ask user what to do
+      Alert.alert(
+        'Printer Error',
+        `Could not print to ${printerConfig.name || printerConfig.type} printer.\n\n${result.error}\n\nWhat would you like to do?`,
+        [
+          { text: 'Share PDF', onPress: () => fallbackPrint(receiptSale) },
+          { text: 'Skip', style: 'cancel' },
+        ],
+      );
+      return;
+    }
+
+    // No thermal printer configured — go straight to share options
+    fallbackPrint(receiptSale);
+  };
+
+  const fallbackPrint = async (receiptSale: ReceiptSale) => {
+    if (!bizInfo) return;
+    const html = buildReceiptHtml(receiptSale, {
+      name: bizInfo.name ?? '',
+      phone: bizInfo.phone,
+      address: bizInfo.address,
+      vatNo: bizInfo.vatNo,
+      receiptFooter: bizInfo.receiptFooter,
+      mpesaPaybill: bizInfo.mpesaPaybill,
+      mpesaTill: bizInfo.mpesaTill,
+    });
+
+    Alert.alert('No Printer Configured', 'Set up a thermal printer in Settings, or:', [
+      { text: 'Print via System', onPress: async () => { await Print.printAsync({ html }); } },
+      { text: 'Share as PDF', onPress: async () => {
         const { uri } = await Print.printToFileAsync({ html });
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Share Receipt' });
       }},

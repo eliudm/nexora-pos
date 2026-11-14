@@ -25,6 +25,13 @@
       "expo-dev-client",
       "expo-image-picker",
       [
+        "react-native-thermal-printer",
+        {
+          "bluetoothPermission": "Allow Nexora POS to connect to your receipt printer via Bluetooth.",
+          "usbPermission": "Allow Nexora POS to connect to your receipt printer via USB."
+        }
+      ],
+      [
         "expo-camera",
         { "cameraPermission": "Allow Nexora POS to access camera for barcode scanning and product photos." }
       ],

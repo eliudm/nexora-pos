@@ -8,6 +8,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { getBusinessInfo, setSetting } from '../../src/db/settings';
+import { PrinterSetup } from '../../src/components/PrinterSetup';
 import { getDb } from '../../src/db/database';
 import { shiftQueries } from '../../src/db/shifts';
 import { stockLogQueries } from '../../src/db/stock_log';
@@ -239,6 +240,14 @@ export default function SettingsScreen() {
             )}
             <Divider />
             <List.Item title="Shift History" left={(p) => <List.Icon {...p} icon="history" color={brand.primary} />} onPress={() => setShiftHistoryOpen(true)} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
+          </Card>
+
+          {/* Printer Setup */}
+          <Text style={styles.section}>Receipt Printer</Text>
+          <Card style={styles.card}>
+            <Card.Content>
+              <PrinterSetup />
+            </Card.Content>
           </Card>
 
           {/* Stock Log */}
