@@ -1,25 +1,39 @@
 {
   "expo": {
-    "name": "pos",
-    "slug": "pos",
+    "name": "Nexora POS",
+    "slug": "nexora-pos",
+    "scheme": "nexorapos",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "ios": {
-      "supportsTablet": true
-    },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#1db8a0"
       },
-      "predictiveBackGestureEnabled": false
+      "package": "com.nexora.pos",
+      "versionCode": 1
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-secure-store",
+      "expo-sharing",
+      "expo-font",
+      "expo-status-bar",
+      "expo-dev-client",
+      [
+        "react-native-purchases",
+        { "androidApiKey": "REVENUECAT_ANDROID_API_KEY" }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "rcApiKey": "REVENUECAT_ANDROID_API_KEY",
+      "subscriptionProductId": "nexora_pos_monthly"
     }
   }
 }
