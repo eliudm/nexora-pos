@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, Appbar, Card, Chip, Portal, Dialog, Button, Divider, DataTable } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { salesQueries, Sale } from '../../src/db/sales';
+import { useSession } from '../../src/context/session';
 import { brand } from '../../src/theme';
 
 const PM_COLORS: Record<string, string> = {
@@ -14,9 +15,30 @@ const PM_COLORS: Record<string, string> = {
 };
 
 export default function SalesScreen() {
+  const qc = useQueryClient();
+  const { user } = useSession();
   const [from, setFrom] = useState(dayjs().format('YYYY-MM-DD'));
   const [to, setTo] = useState(dayjs().format('YYYY-MM-DD'));
   const [selected, setSelected] = useState<Sale | null>(null);
+
+  const voidMutation = useMutation({
+    mutationFn: (saleId: number) => salesQueries.voidSale(saleId, user?.id ?? null),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sales'] });
+      qc.invalidateQueries({ queryKey: ['daily-summary'] });
+      qc.invalidateQueries({ queryKey: ['products'] });
+      setSelected(null);
+      Alert.alert('Voided', 'Sale has been voided and stock restored.');
+    },
+  });
+
+  const handleVoid = (sale: Sale) => {
+    if (user?.role !== 'ADMIN') { Alert.alert('Access Denied', 'Only admins can void sales.'); return; }
+    Alert.alert('Void Sale', `Void ${sale.invoice_no}? Stock will be restored.`, [
+      { text: 'Cancel' },
+      { text: 'Void', style: 'destructive', onPress: () => voidMutation.mutate(sale.id) },
+    ]);
+  };
 
   const { data: sales } = useQuery({
     queryKey: ['sales', from, to],
@@ -77,14 +99,16 @@ export default function SalesScreen() {
                 {item.customer_name && <Text style={styles.customer}>{item.customer_name}</Text>}
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.total}>KES {item.total.toLocaleString()}</Text>
-                <Chip
-                  compact
-                  style={[styles.pmChip, { backgroundColor: (PM_COLORS[item.payment_method] ?? '#888') + '22' }]}
-                  textStyle={[styles.pmText, { color: PM_COLORS[item.payment_method] ?? '#888' }]}
-                >
-                  {item.payment_method}
-                </Chip>
+                <Text style={[styles.total, item.status === 'VOIDED' && { color: '#aaa', textDecorationLine: 'line-through' }]}>
+                  KES {item.total.toLocaleString()}
+                </Text>
+                {item.status === 'VOIDED' ? (
+                  <Chip compact style={[styles.pmChip, { backgroundColor: '#fce4e4' }]} textStyle={[styles.pmText, { color: '#e53935' }]}>VOIDED</Chip>
+                ) : (
+                  <Chip compact style={[styles.pmChip, { backgroundColor: (PM_COLORS[item.payment_method] ?? '#888') + '22' }]} textStyle={[styles.pmText, { color: PM_COLORS[item.payment_method] ?? '#888' }]}>
+                    {item.payment_method}
+                  </Chip>
+                )}
               </View>
             </Card.Content>
           </Card>
@@ -142,6 +166,11 @@ export default function SalesScreen() {
             </View>
           </Dialog.Content>
           <Dialog.Actions>
+            {selected?.status !== 'VOIDED' && user?.role === 'ADMIN' && (
+              <Button textColor="#e53935" onPress={() => handleVoid(selected!)} loading={voidMutation.isPending}>
+                Void Sale
+              </Button>
+            )}
             <Button onPress={() => setSelected(null)}>Close</Button>
           </Dialog.Actions>
         </Dialog>
