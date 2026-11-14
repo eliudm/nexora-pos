@@ -76,10 +76,25 @@ export const salesQueries = {
         [saleId, item.product_id, item.product_name, item.qty,
          item.unit_price, item.discount, item.vat_rate, item.vat_amount, item.total],
       );
-      // Deduct stock if tracked
+      // Deduct stock and log
+      const prod = await db.getFirstAsync<{ stock_qty: number; name: string; track_stock: number }>(
+        'SELECT stock_qty, name, track_stock FROM products WHERE id = ?', [item.product_id],
+      );
+      if (prod?.track_stock) {
+        const newQty = (prod.stock_qty ?? 0) - item.qty;
+        await db.runAsync('UPDATE products SET stock_qty = ? WHERE id = ?', [newQty, item.product_id]);
+        await db.runAsync(
+          'INSERT INTO stock_log (product_id, product_name, change_qty, balance_after, reason, user_id) VALUES (?,?,?,?,?,?)',
+          [item.product_id, item.product_name, -item.qty, newQty, `Sale ${invoiceNo}`, opts.cashierId ?? null],
+        );
+      }
+    }
+
+    // Deduct from customer credit balance if payment method is CREDIT
+    if (opts.paymentMethod === 'CREDIT' && opts.customerId) {
       await db.runAsync(
-        'UPDATE products SET stock_qty = stock_qty - ? WHERE id = ? AND track_stock = 1',
-        [item.qty, item.product_id],
+        'UPDATE customers SET credit_balance = credit_balance - ? WHERE id = ?',
+        [total, opts.customerId],
       );
     }
 
@@ -146,6 +161,42 @@ export const salesQueries = {
       GROUP BY si.product_id, si.product_name
       ORDER BY total_revenue DESC LIMIT ?
     `, [from, to, limit]);
+  },
+
+  voidSale: async (saleId: number, userId: number | null): Promise<void> => {
+    const db = await getDb();
+    const sale = await db.getFirstAsync<{ status: string; customer_id: number | null; total: number; payment_method: string }>(
+      'SELECT status, customer_id, total, payment_method FROM sales WHERE id = ?', [saleId],
+    );
+    if (!sale || sale.status === 'VOIDED') return;
+
+    // Restore stock
+    const items = await db.getAllAsync<CartItem & { product_id: number }>(
+      'SELECT * FROM sale_items WHERE sale_id = ?', [saleId],
+    );
+    for (const item of items) {
+      const prod = await db.getFirstAsync<{ stock_qty: number; track_stock: number }>(
+        'SELECT stock_qty, track_stock FROM products WHERE id = ?', [item.product_id],
+      );
+      if (prod?.track_stock) {
+        const newQty = (prod.stock_qty ?? 0) + item.qty;
+        await db.runAsync('UPDATE products SET stock_qty = ? WHERE id = ?', [newQty, item.product_id]);
+        await db.runAsync(
+          'INSERT INTO stock_log (product_id, product_name, change_qty, balance_after, reason, user_id) VALUES (?,?,?,?,?,?)',
+          [item.product_id, item.product_name, item.qty, newQty, `Void sale ${saleId}`, userId],
+        );
+      }
+    }
+
+    // Restore credit balance if was credit sale
+    if (sale.payment_method === 'CREDIT' && sale.customer_id) {
+      await db.runAsync(
+        'UPDATE customers SET credit_balance = credit_balance + ? WHERE id = ?',
+        [sale.total, sale.customer_id],
+      );
+    }
+
+    await db.runAsync("UPDATE sales SET status = 'VOIDED' WHERE id = ?", [saleId]);
   },
 
   getRevenueTrend: async (days = 7) => {
