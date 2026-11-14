@@ -1,10 +1,16 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, FlatList, Alert } from 'react-native';
-import { Text, Appbar, Searchbar, FAB, Portal, Dialog, TextInput, Button, Card, Menu, Divider } from 'react-native-paper';
+import { View, StyleSheet, FlatList, Alert, ScrollView } from 'react-native';
+import { Text, Appbar, Searchbar, FAB, Portal, Dialog, TextInput, Button, Card, Menu, Divider, Chip } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { customerQueries, Customer } from '../../src/db/customers';
+import { salesQueries, Sale } from '../../src/db/sales';
+import { loyaltyQueries, LoyaltyTransaction } from '../../src/db/loyalty';
 import { brand } from '../../src/theme';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import dayjs from 'dayjs';
 
 const EMPTY = { name: '', phone: '', email: '', credit_balance: '0' };
 
@@ -15,10 +21,28 @@ export default function CustomersScreen() {
   const [editing, setEditing] = useState<Customer | null>(null);
   const [form, setForm] = useState({ ...EMPTY });
   const [menuId, setMenuId] = useState<number | null>(null);
+  const [statementCustomer, setStatementCustomer] = useState<Customer | null>(null);
+  const [loyaltyCustomer, setLoyaltyCustomer] = useState<Customer | null>(null);
+  const [adjustPoints, setAdjustPoints] = useState('');
+  const [adjustNote, setAdjustNote] = useState('');
 
   const { data: customers } = useQuery({
     queryKey: ['customers', search],
     queryFn: () => customerQueries.getAll(search),
+  });
+
+  const { data: statementSales } = useQuery({
+    queryKey: ['customer-sales', statementCustomer?.id],
+    queryFn: () => salesQueries.getAll(undefined, undefined, 100).then((all) =>
+      all.filter((s) => s.customer_id === statementCustomer!.id)
+    ),
+    enabled: !!statementCustomer,
+  });
+
+  const { data: loyaltyHistory } = useQuery({
+    queryKey: ['loyalty-history', loyaltyCustomer?.id],
+    queryFn: () => loyaltyQueries.getHistory(loyaltyCustomer!.id),
+    enabled: !!loyaltyCustomer,
   });
 
   const saveMutation = useMutation({
@@ -40,6 +64,22 @@ export default function CustomersScreen() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['customers'] }),
   });
 
+  const loyaltyAdjustMutation = useMutation({
+    mutationFn: async () => {
+      const pts = parseInt(adjustPoints);
+      if (isNaN(pts) || pts === 0) throw new Error('Enter a non-zero point value');
+      await loyaltyQueries.adjust(loyaltyCustomer!.id, pts, adjustNote.trim() || 'Manual adjustment');
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['customers'] });
+      qc.invalidateQueries({ queryKey: ['loyalty-history'] });
+      setAdjustPoints('');
+      setAdjustNote('');
+      Alert.alert('Done', 'Loyalty points adjusted.');
+    },
+    onError: (e: any) => Alert.alert('Error', e.message),
+  });
+
   const closeDialog = () => { setDialogOpen(false); setEditing(null); setForm({ ...EMPTY }); };
 
   const openEdit = (c: Customer) => {
@@ -55,6 +95,27 @@ export default function CustomersScreen() {
     ]);
 
   const f = (key: keyof typeof form) => (val: string) => setForm((p) => ({ ...p, [key]: val }));
+
+  const shareStatement = async () => {
+    if (!statementCustomer || !statementSales) return;
+    const rows = statementSales.map((s) =>
+      `<tr><td>${s.invoice_no}</td><td>${dayjs(s.created_at).format('D MMM YYYY')}</td><td>${s.payment_method}</td><td style="text-align:right">KES ${s.total.toFixed(0)}</td><td>${s.status}</td></tr>`
+    ).join('');
+    const totalOwed = statementSales.filter((s) => s.payment_method === 'CREDIT' && s.status === 'PAID').reduce((sum, s) => sum + s.total, 0);
+    const html = `<html><body style="font-family:sans-serif;padding:24px">
+      <h2>${statementCustomer.name} — Account Statement</h2>
+      <p>Phone: ${statementCustomer.phone ?? 'N/A'} &nbsp; Credit Balance: KES ${statementCustomer.credit_balance.toLocaleString()}</p>
+      <p>Loyalty Points: ${(statementCustomer as any).loyalty_points ?? 0}</p>
+      <hr/>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:#f5f5f5"><th>Invoice</th><th>Date</th><th>Payment</th><th>Amount</th><th>Status</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <hr/><p><b>Generated:</b> ${dayjs().format('D MMM YYYY HH:mm')}</p>
+    </body></html>`;
+    const { uri } = await Print.printToFileAsync({ html });
+    await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: `${statementCustomer.name} Statement` });
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -82,11 +143,20 @@ export default function CustomersScreen() {
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={styles.name}>{item.name}</Text>
                 {item.phone && <Text style={styles.sub}>{item.phone}</Text>}
-                {item.credit_balance !== 0 && (
-                  <Text style={[styles.credit, item.credit_balance > 0 ? styles.creditPos : styles.creditNeg]}>
-                    Balance: KES {item.credit_balance.toLocaleString()}
-                  </Text>
-                )}
+                <View style={styles.badgeRow}>
+                  {item.credit_balance !== 0 && (
+                    <Chip compact style={[styles.badge, item.credit_balance > 0 ? styles.creditPosBg : styles.creditNegBg]}
+                      textStyle={{ fontSize: 10, color: item.credit_balance > 0 ? '#16a34a' : '#dc2626' }}>
+                      KES {item.credit_balance.toLocaleString()}
+                    </Chip>
+                  )}
+                  {(item as any).loyalty_points > 0 && (
+                    <Chip compact style={[styles.badge, { backgroundColor: '#fffbeb' }]} textStyle={{ fontSize: 10, color: '#92400e' }}
+                      icon="star">
+                      {(item as any).loyalty_points} pts
+                    </Chip>
+                  )}
+                </View>
               </View>
               <Menu
                 visible={menuId === item.id}
@@ -94,6 +164,8 @@ export default function CustomersScreen() {
                 anchor={<Appbar.Action icon="dots-vertical" size={20} onPress={() => setMenuId(item.id)} />}
               >
                 <Menu.Item onPress={() => { setMenuId(null); openEdit(item); }} title="Edit" />
+                <Menu.Item onPress={() => { setMenuId(null); setStatementCustomer(item); }} title="View Statement" leadingIcon="file-document" />
+                <Menu.Item onPress={() => { setMenuId(null); setLoyaltyCustomer(item); }} title="Loyalty Points" leadingIcon="star" />
                 <Divider />
                 <Menu.Item onPress={() => { setMenuId(null); handleDelete(item.id); }} title="Delete" titleStyle={{ color: '#e53935' }} />
               </Menu>
@@ -102,6 +174,7 @@ export default function CustomersScreen() {
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
+            <MaterialCommunityIcons name="account-multiple-outline" size={48} color="#ccc" />
             <Text style={styles.emptyText}>No customers yet. Add your first customer.</Text>
           </View>
         }
@@ -110,6 +183,7 @@ export default function CustomersScreen() {
       <FAB icon="account-plus" style={styles.fab} color="#fff" onPress={() => setDialogOpen(true)} />
 
       <Portal>
+        {/* Edit/Add Customer */}
         <Dialog visible={dialogOpen} onDismiss={closeDialog}>
           <Dialog.Title>{editing ? 'Edit Customer' : 'Add Customer'}</Dialog.Title>
           <Dialog.Content>
@@ -121,6 +195,91 @@ export default function CustomersScreen() {
           <Dialog.Actions>
             <Button onPress={closeDialog}>Cancel</Button>
             <Button mode="contained" onPress={() => saveMutation.mutate()} loading={saveMutation.isPending}>Save</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Customer Statement */}
+        <Dialog visible={!!statementCustomer} onDismiss={() => setStatementCustomer(null)} style={styles.wideDialog}>
+          <Dialog.Title>{statementCustomer?.name} — Statement</Dialog.Title>
+          <Dialog.ScrollArea>
+            <ScrollView style={{ maxHeight: 500 }}>
+              <View style={styles.statRow}>
+                <View style={styles.statBox}><Text style={styles.statVal}>KES {(statementCustomer?.credit_balance ?? 0).toLocaleString()}</Text><Text style={styles.statLabel}>Credit Balance</Text></View>
+                <View style={styles.statBox}><Text style={styles.statVal}>{(statementSales ?? []).length}</Text><Text style={styles.statLabel}>Total Sales</Text></View>
+                <View style={styles.statBox}><Text style={[styles.statVal, { color: '#f59e0b' }]}>{(statementCustomer as any)?.loyalty_points ?? 0}</Text><Text style={styles.statLabel}>Loyalty Pts</Text></View>
+              </View>
+              <Divider style={{ marginVertical: 10 }} />
+              {(statementSales ?? []).map((s) => (
+                <View key={s.id} style={styles.saleRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.saleInv}>{s.invoice_no}</Text>
+                    <Text style={styles.saleDate}>{dayjs(s.created_at).format('D MMM YYYY HH:mm')}</Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.saleAmt, s.status === 'VOIDED' && { textDecorationLine: 'line-through', color: '#999' }]}>
+                      KES {s.total.toFixed(0)}
+                    </Text>
+                    <Text style={styles.salePm}>{s.payment_method}</Text>
+                  </View>
+                </View>
+              ))}
+              {(statementSales ?? []).length === 0 && (
+                <Text style={{ color: '#aaa', textAlign: 'center', padding: 20 }}>No sales recorded</Text>
+              )}
+            </ScrollView>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
+            <Button onPress={() => setStatementCustomer(null)}>Close</Button>
+            <Button mode="contained" icon="share" onPress={shareStatement}>Share PDF</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Loyalty Points */}
+        <Dialog visible={!!loyaltyCustomer} onDismiss={() => setLoyaltyCustomer(null)} style={styles.wideDialog}>
+          <Dialog.Title>Loyalty Points — {loyaltyCustomer?.name}</Dialog.Title>
+          <Dialog.ScrollArea>
+            <ScrollView style={{ maxHeight: 460 }}>
+              <View style={styles.loyaltyBalance}>
+                <Text style={styles.loyaltyBalNum}>{(loyaltyCustomer as any)?.loyalty_points ?? 0}</Text>
+                <Text style={styles.loyaltyBalLabel}>Current Points</Text>
+              </View>
+              <Divider style={{ marginVertical: 10 }} />
+              <Text style={styles.sectionLabel}>Adjust Points Manually</Text>
+              <TextInput
+                label="Points (use - to deduct)"
+                value={adjustPoints}
+                onChangeText={setAdjustPoints}
+                keyboardType="numbers-and-punctuation"
+                mode="outlined"
+                style={styles.input}
+              />
+              <TextInput
+                label="Reason"
+                value={adjustNote}
+                onChangeText={setAdjustNote}
+                mode="outlined"
+                style={styles.input}
+              />
+              <Button mode="outlined" onPress={() => loyaltyAdjustMutation.mutate()} loading={loyaltyAdjustMutation.isPending} style={{ marginBottom: 16 }}>
+                Apply Adjustment
+              </Button>
+              <Divider style={{ marginBottom: 10 }} />
+              <Text style={styles.sectionLabel}>History</Text>
+              {(loyaltyHistory ?? []).map((tx) => (
+                <View key={tx.id} style={styles.txRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.txNote}>{tx.note ?? tx.type}</Text>
+                    <Text style={styles.txDate}>{dayjs(tx.created_at).format('D MMM HH:mm')}</Text>
+                  </View>
+                  <Text style={[styles.txPoints, { color: tx.points_change > 0 ? '#22c55e' : '#e53935' }]}>
+                    {tx.points_change > 0 ? '+' : ''}{tx.points_change}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
+            <Button onPress={() => setLoyaltyCustomer(null)}>Close</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -140,11 +299,30 @@ const styles = StyleSheet.create({
   avatarText: { color: '#fff', fontSize: 18, fontWeight: '700' },
   name: { fontSize: 15, fontWeight: '700', color: '#111' },
   sub: { fontSize: 12, color: '#888', marginTop: 2 },
-  credit: { fontSize: 12, fontWeight: '600', marginTop: 2 },
-  creditPos: { color: '#22c55e' },
-  creditNeg: { color: '#e53935' },
+  badgeRow: { flexDirection: 'row', gap: 6, marginTop: 4 },
+  badge: { borderRadius: 6 },
+  creditPosBg: { backgroundColor: '#f0fdf4' },
+  creditNegBg: { backgroundColor: '#fef2f2' },
   empty: { padding: 40, alignItems: 'center' },
-  emptyText: { color: '#aaa', textAlign: 'center' },
+  emptyText: { color: '#aaa', textAlign: 'center', marginTop: 10 },
   fab: { position: 'absolute', right: 20, bottom: 20, backgroundColor: brand.primary },
   input: { marginBottom: 10, backgroundColor: '#fff' },
+  wideDialog: { marginHorizontal: 8 },
+  statRow: { flexDirection: 'row', justifyContent: 'space-around', marginVertical: 8 },
+  statBox: { alignItems: 'center' },
+  statVal: { fontSize: 18, fontWeight: '800', color: brand.primary },
+  statLabel: { fontSize: 11, color: '#888', marginTop: 2 },
+  saleRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  saleInv: { fontSize: 13, fontWeight: '600', color: '#111' },
+  saleDate: { fontSize: 11, color: '#aaa', marginTop: 2 },
+  saleAmt: { fontSize: 13, fontWeight: '700', color: brand.primary },
+  salePm: { fontSize: 11, color: '#888' },
+  loyaltyBalance: { alignItems: 'center', paddingVertical: 12 },
+  loyaltyBalNum: { fontSize: 40, fontWeight: '800', color: '#f59e0b' },
+  loyaltyBalLabel: { fontSize: 13, color: '#888', marginTop: 4 },
+  sectionLabel: { fontSize: 13, fontWeight: '700', color: '#555', marginBottom: 6 },
+  txRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  txNote: { fontSize: 13, color: '#111' },
+  txDate: { fontSize: 11, color: '#aaa', marginTop: 2 },
+  txPoints: { fontSize: 15, fontWeight: '700' },
 });

@@ -69,6 +69,12 @@ export default function AppLayout() {
           tabBarIcon: ({ color, size }) => <TabIcon name="cog" color={color} size={size} />,
         }}
       />
+      {/* Secondary screens — hidden from tab bar, navigated via router.push */}
+      <Tabs.Screen name="suppliers" options={{ href: null }} />
+      <Tabs.Screen name="purchase-orders" options={{ href: null }} />
+      <Tabs.Screen name="expenses" options={{ href: null }} />
+      <Tabs.Screen name="stocktake" options={{ href: null }} />
+      <Tabs.Screen name="quotations" options={{ href: null }} />
     </Tabs>
   );
 }

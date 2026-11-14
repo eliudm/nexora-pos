@@ -7,19 +7,23 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { productQueries, Product, Category } from '../../src/db/products';
+import { wastageQueries, WASTAGE_REASONS } from '../../src/db/wastage';
+import { useSession } from '../../src/context/session';
 import { brand } from '../../src/theme';
 
-type DialogMode = 'product' | 'category' | 'barcode' | null;
+type DialogMode = 'product' | 'category' | 'barcode' | 'wastage' | null;
 
 const EMPTY_PRODUCT = {
   name: '', price: '', cost: '', barcode: '', stock_qty: '0',
   track_stock: true, vat_rate: '16', category_id: null as number | null, image_uri: null as string | null,
+  low_stock_threshold: '5', reorder_qty: '10',
 };
 
 const PRESET_COLORS = ['#1db8a0', '#6f67ff', '#f59e0b', '#e53935', '#22c55e', '#3b82f6', '#ec4899', '#8b5cf6', '#f97316', '#64748b'];
 
 export default function ProductsScreen() {
   const qc = useQueryClient();
+  const { user } = useSession();
   const [search, setSearch] = useState('');
   const [dialog, setDialog] = useState<DialogMode>(null);
   const [editing, setEditing] = useState<Product | null>(null);
@@ -29,6 +33,9 @@ export default function ProductsScreen() {
   const [menuId, setMenuId] = useState<number | null>(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [lastScan, setLastScan] = useState('');
+  const [wastageProduct, setWastageProduct] = useState<Product | null>(null);
+  const [wastageQty, setWastageQty] = useState('');
+  const [wastageReason, setWastageReason] = useState(WASTAGE_REASONS[0]);
 
   const { data: products } = useQuery({ queryKey: ['products', search], queryFn: () => productQueries.getAll(search) });
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: productQueries.getCategories });
@@ -40,11 +47,36 @@ export default function ProductsScreen() {
         barcode: form.barcode.trim() || null, stock_qty: parseInt(form.stock_qty) || 0,
         track_stock: form.track_stock ? 1 : 0, vat_rate: parseFloat(form.vat_rate) || 0,
         category_id: form.category_id, image_uri: form.image_uri, is_active: 1,
+        low_stock_threshold: parseFloat(form.low_stock_threshold) || 0,
+        reorder_qty: parseFloat(form.reorder_qty) || 0,
       };
       if (editing) await productQueries.update(editing.id, data);
       else await productQueries.create(data);
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); closeDialog(); },
+  });
+
+  const wastageMutation = useMutation({
+    mutationFn: async () => {
+      const qty = parseFloat(wastageQty);
+      if (!wastageProduct || isNaN(qty) || qty <= 0) throw new Error('Enter a valid quantity');
+      await wastageQueries.record({
+        product_id: wastageProduct.id,
+        product_name: wastageProduct.name,
+        qty,
+        reason: wastageReason,
+        cost: wastageProduct.cost * qty,
+        user_id: user?.id ?? null,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['products'] });
+      setDialog(null);
+      setWastageProduct(null);
+      setWastageQty('');
+      Alert.alert('Recorded', 'Wastage has been logged and stock adjusted.');
+    },
+    onError: (e: any) => Alert.alert('Error', e.message),
   });
 
   const deleteMutation = useMutation({
@@ -61,7 +93,13 @@ export default function ProductsScreen() {
 
   const openEdit = (p: Product) => {
     setEditing(p);
-    setForm({ name: p.name, price: String(p.price), cost: String(p.cost), barcode: p.barcode ?? '', stock_qty: String(p.stock_qty), track_stock: p.track_stock === 1, vat_rate: String(p.vat_rate), category_id: p.category_id, image_uri: p.image_uri });
+    setForm({
+      name: p.name, price: String(p.price), cost: String(p.cost), barcode: p.barcode ?? '',
+      stock_qty: String(p.stock_qty), track_stock: p.track_stock === 1, vat_rate: String(p.vat_rate),
+      category_id: p.category_id, image_uri: p.image_uri,
+      low_stock_threshold: String((p as any).low_stock_threshold ?? 5),
+      reorder_qty: String((p as any).reorder_qty ?? 10),
+    });
     setDialog('product');
   };
 
@@ -141,6 +179,7 @@ export default function ProductsScreen() {
                 anchor={<Appbar.Action icon="dots-vertical" size={20} onPress={() => setMenuId(item.id)} />}
               >
                 <Menu.Item onPress={() => { setMenuId(null); openEdit(item); }} title="Edit" />
+                <Menu.Item onPress={() => { setMenuId(null); setWastageProduct(item); setWastageQty(''); setWastageReason(WASTAGE_REASONS[0]); setDialog('wastage'); }} title="Record Wastage" leadingIcon="trash-can" />
                 <Divider />
                 <Menu.Item onPress={() => { setMenuId(null); handleDelete(item.id); }} title="Delete" titleStyle={{ color: '#e53935' }} />
               </Menu>
@@ -210,7 +249,13 @@ export default function ProductsScreen() {
                   <Switch value={form.track_stock} onValueChange={(v) => setForm((f) => ({ ...f, track_stock: v }))} color={brand.primary} />
                 </View>
                 {form.track_stock && (
-                  <TextInput label="Stock Quantity" value={form.stock_qty} onChangeText={(v) => setForm((f) => ({ ...f, stock_qty: v }))} mode="outlined" keyboardType="numeric" style={styles.input} />
+                  <>
+                    <TextInput label="Stock Quantity" value={form.stock_qty} onChangeText={(v) => setForm((f) => ({ ...f, stock_qty: v }))} mode="outlined" keyboardType="numeric" style={styles.input} />
+                    <View style={styles.row}>
+                      <TextInput label="Low Stock Alert at" value={form.low_stock_threshold} onChangeText={(v) => setForm((f) => ({ ...f, low_stock_threshold: v }))} mode="outlined" keyboardType="numeric" style={[styles.input, { flex: 1, marginRight: 8 }]} />
+                      <TextInput label="Reorder Qty" value={form.reorder_qty} onChangeText={(v) => setForm((f) => ({ ...f, reorder_qty: v }))} mode="outlined" keyboardType="numeric" style={[styles.input, { flex: 1 }]} />
+                    </View>
+                  </>
                 )}
                 {(categories?.length ?? 0) > 0 && (
                   <View>
@@ -229,6 +274,30 @@ export default function ProductsScreen() {
           <Dialog.Actions>
             <Button onPress={closeDialog}>Cancel</Button>
             <Button mode="contained" onPress={() => saveMutation.mutate()} loading={saveMutation.isPending}>Save</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Wastage Dialog */}
+        <Dialog visible={dialog === 'wastage'} onDismiss={() => setDialog(null)}>
+          <Dialog.Title>Record Wastage</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#111', marginBottom: 10 }}>{wastageProduct?.name}</Text>
+            <TextInput label="Quantity *" value={wastageQty} onChangeText={setWastageQty} keyboardType="decimal-pad" mode="outlined" style={{ marginBottom: 10 }} autoFocus />
+            <Text style={{ fontSize: 13, color: '#555', marginBottom: 6 }}>Reason</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {WASTAGE_REASONS.map((r) => (
+                <Chip key={r} selected={wastageReason === r} onPress={() => setWastageReason(r)} compact>{r}</Chip>
+              ))}
+            </View>
+            {wastageProduct && wastageQty && (
+              <Text style={{ marginTop: 10, fontSize: 12, color: '#888' }}>
+                Estimated cost: KES {(wastageProduct.cost * (parseFloat(wastageQty) || 0)).toFixed(0)}
+              </Text>
+            )}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setDialog(null)}>Cancel</Button>
+            <Button mode="contained" onPress={() => wastageMutation.mutate()} loading={wastageMutation.isPending}>Record</Button>
           </Dialog.Actions>
         </Dialog>
 

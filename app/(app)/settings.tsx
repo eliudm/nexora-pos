@@ -7,11 +7,13 @@ import { router } from 'expo-router';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
-import { getBusinessInfo, setSetting } from '../../src/db/settings';
+import { getBusinessInfo, setSetting, getSetting } from '../../src/db/settings';
 import { PrinterSetup } from '../../src/components/PrinterSetup';
 import { getDb } from '../../src/db/database';
 import { shiftQueries } from '../../src/db/shifts';
 import { stockLogQueries } from '../../src/db/stock_log';
+import { cashDrawerQueries } from '../../src/db/cash_drawer';
+import { darajaService, DarajaConfig } from '../../src/services/mpesa_daraja';
 import { useSession } from '../../src/context/session';
 import { brand } from '../../src/theme';
 import dayjs from 'dayjs';
@@ -81,6 +83,28 @@ export default function SettingsScreen() {
   const [stockLogOpen, setStockLogOpen] = useState(false);
   const [shiftHistoryOpen, setShiftHistoryOpen] = useState(false);
 
+  // Cash drawer
+  const [drawerLogOpen, setDrawerLogOpen] = useState(false);
+  const [drawerEntryOpen, setDrawerEntryOpen] = useState(false);
+  const [drawerType, setDrawerType] = useState<'IN' | 'OUT'>('IN');
+  const [drawerAmount, setDrawerAmount] = useState('');
+  const [drawerNote, setDrawerNote] = useState('');
+
+  // Daraja API
+  const [darajaKey, setDarajaKey] = useState('');
+  const [darajaSecret, setDarajaSecret] = useState('');
+  const [darajaShortCode, setDarajaShortCode] = useState('');
+  const [darajaPasskey, setDarajaPasskey] = useState('');
+  const [darajaCallback, setDarajaCallback] = useState('');
+  const [darajaEnv, setDarajaEnv] = useState<'sandbox' | 'live'>('sandbox');
+  const [savingDaraja, setSavingDaraja] = useState(false);
+
+  // Integrations
+  const [waEnabled, setWaEnabled] = useState(false);
+  const [atsApiKey, setAtsApiKey] = useState('');
+  const [atsSenderId, setAtsSenderId] = useState('');
+  const [savingIntegrations, setSavingIntegrations] = useState(false);
+
   useEffect(() => {
     getBusinessInfo().then((info) => {
       setBizName(info?.name ?? '');
@@ -90,6 +114,25 @@ export default function SettingsScreen() {
       setFooter(info?.receiptFooter ?? '');
       setPaybill(info?.mpesaPaybill ?? '');
       setTill(info?.mpesaTill ?? '');
+    });
+    darajaService.getConfig().then((cfg) => {
+      if (cfg) {
+        setDarajaKey(cfg.consumerKey);
+        setDarajaSecret(cfg.consumerSecret);
+        setDarajaShortCode(cfg.shortCode);
+        setDarajaPasskey(cfg.passkey);
+        setDarajaCallback(cfg.callbackUrl);
+        setDarajaEnv(cfg.environment);
+      }
+    });
+    Promise.all([
+      getSetting('wa_receipts_enabled'),
+      getSetting('ats_api_key'),
+      getSetting('ats_sender_id'),
+    ]).then(([wa, ak, sid]) => {
+      setWaEnabled(wa === '1');
+      setAtsApiKey(ak ?? '');
+      setAtsSenderId(sid ?? '');
     });
   }, []);
 
@@ -108,6 +151,35 @@ export default function SettingsScreen() {
     queryKey: ['stock-log'],
     queryFn: () => stockLogQueries.getAll(100),
     enabled: stockLogOpen,
+  });
+
+  const { data: drawerBalance, refetch: refetchBalance } = useQuery({
+    queryKey: ['drawer-balance'],
+    queryFn: cashDrawerQueries.getCurrentBalance,
+  });
+
+  const { data: drawerLog } = useQuery({
+    queryKey: ['drawer-log'],
+    queryFn: () => cashDrawerQueries.getAll(100),
+    enabled: drawerLogOpen,
+  });
+
+  const addDrawerEntry = useMutation({
+    mutationFn: () => cashDrawerQueries.add({
+      type: drawerType,
+      amount: parseFloat(drawerAmount) || 0,
+      reason: drawerNote,
+      cashier_id: user!.id,
+      cashier_name: user!.name,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['drawer-balance'] });
+      qc.invalidateQueries({ queryKey: ['drawer-log'] });
+      setDrawerEntryOpen(false);
+      setDrawerAmount('');
+      setDrawerNote('');
+      refetchBalance();
+    },
   });
 
   const openShiftMutation = useMutation({
@@ -195,6 +267,42 @@ export default function SettingsScreen() {
     ]);
   };
 
+  const handleSaveDaraja = async () => {
+    if (!darajaKey.trim() || !darajaSecret.trim() || !darajaShortCode.trim() || !darajaPasskey.trim()) {
+      Alert.alert('Required', 'Fill in Consumer Key, Consumer Secret, Short Code and Passkey.');
+      return;
+    }
+    setSavingDaraja(true);
+    try {
+      const cfg: DarajaConfig = {
+        consumerKey: darajaKey.trim(),
+        consumerSecret: darajaSecret.trim(),
+        shortCode: darajaShortCode.trim(),
+        passkey: darajaPasskey.trim(),
+        callbackUrl: darajaCallback.trim(),
+        environment: darajaEnv,
+      };
+      await darajaService.saveConfig(cfg);
+      Alert.alert('Saved', 'Daraja API settings updated.');
+    } finally {
+      setSavingDaraja(false);
+    }
+  };
+
+  const handleSaveIntegrations = async () => {
+    setSavingIntegrations(true);
+    try {
+      await Promise.all([
+        setSetting('wa_receipts_enabled', waEnabled ? '1' : '0'),
+        setSetting('ats_api_key', atsApiKey.trim()),
+        setSetting('ats_sender_id', atsSenderId.trim()),
+      ]);
+      Alert.alert('Saved', 'Integration settings updated.');
+    } finally {
+      setSavingIntegrations(false);
+    }
+  };
+
   const handleLogout = () => Alert.alert('Lock Screen', 'Return to PIN screen?', [
     { text: 'Cancel' },
     { text: 'Lock', onPress: () => { setUser(null); router.replace('/(auth)'); } },
@@ -256,6 +364,23 @@ export default function SettingsScreen() {
             <List.Item title="Stock Movement Log" description="View all stock additions and deductions" left={(p) => <List.Icon {...p} icon="package-variant" color={brand.primary} />} onPress={() => setStockLogOpen(true)} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
           </Card>
 
+          {/* Cash Drawer */}
+          <Text style={styles.section}>Cash Drawer</Text>
+          <Card style={styles.card}>
+            <Card.Content>
+              <View style={styles.drawerBalance}>
+                <Text style={styles.drawerLabel}>Current Balance</Text>
+                <Text style={styles.drawerAmt}>{fmt(drawerBalance ?? 0)}</Text>
+              </View>
+              <View style={styles.drawerBtns}>
+                <Button mode="contained" icon="plus" style={{ flex: 1, backgroundColor: '#22c55e' }} onPress={() => { setDrawerType('IN'); setDrawerEntryOpen(true); }}>Cash In</Button>
+                <Button mode="contained" icon="minus" style={{ flex: 1, backgroundColor: '#e53935' }} onPress={() => { setDrawerType('OUT'); setDrawerEntryOpen(true); }}>Cash Out</Button>
+              </View>
+            </Card.Content>
+            <Divider />
+            <List.Item title="Drawer Log" description="View all cash movements" left={(p) => <List.Icon {...p} icon="cash" color={brand.primary} />} onPress={() => setDrawerLogOpen(true)} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
+          </Card>
+
           {/* Business Details */}
           <Text style={styles.section}>Business Details</Text>
           <Card style={styles.card}>
@@ -271,8 +396,21 @@ export default function SettingsScreen() {
           <Text style={styles.section}>M-Pesa Configuration</Text>
           <Card style={styles.card}>
             <Card.Content>
+              <Text style={styles.subSection}>Receipt Display</Text>
               <TextInput label="Paybill Number" value={paybill} onChangeText={setPaybill} mode="outlined" keyboardType="numeric" style={styles.input} />
               <TextInput label="Till Number" value={till} onChangeText={setTill} mode="outlined" keyboardType="numeric" style={styles.input} />
+              <Text style={styles.subSection}>Daraja API (STK Push)</Text>
+              <Text style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>Required for triggering real M-Pesa payment prompts. Get credentials from developer.safaricom.co.ke</Text>
+              <TextInput label="Consumer Key" value={darajaKey} onChangeText={setDarajaKey} mode="outlined" style={styles.input} autoCapitalize="none" />
+              <TextInput label="Consumer Secret" value={darajaSecret} onChangeText={setDarajaSecret} mode="outlined" style={styles.input} autoCapitalize="none" secureTextEntry />
+              <TextInput label="Business Short Code" value={darajaShortCode} onChangeText={setDarajaShortCode} mode="outlined" keyboardType="numeric" style={styles.input} />
+              <TextInput label="Passkey" value={darajaPasskey} onChangeText={setDarajaPasskey} mode="outlined" style={styles.input} autoCapitalize="none" secureTextEntry />
+              <TextInput label="Callback URL (optional)" value={darajaCallback} onChangeText={setDarajaCallback} mode="outlined" style={styles.input} autoCapitalize="none" />
+              <View style={styles.envRow}>
+                <Button mode={darajaEnv === 'sandbox' ? 'contained' : 'outlined'} onPress={() => setDarajaEnv('sandbox')} compact style={{ flex: 1 }}>Sandbox</Button>
+                <Button mode={darajaEnv === 'live' ? 'contained' : 'outlined'} onPress={() => setDarajaEnv('live')} compact style={{ flex: 1 }}>Live</Button>
+              </View>
+              <Button mode="outlined" onPress={handleSaveDaraja} loading={savingDaraja} style={{ marginTop: 8 }}>Save Daraja Config</Button>
             </Card.Content>
           </Card>
 
@@ -286,6 +424,27 @@ export default function SettingsScreen() {
           <Button mode="contained" onPress={handleSaveBusiness} loading={saving} disabled={saving} style={styles.saveBtn}>
             Save Business Settings
           </Button>
+
+          <Divider style={{ marginVertical: 24 }} />
+
+          {/* Integrations */}
+          <Text style={styles.section}>Integrations</Text>
+          <Card style={styles.card}>
+            <Card.Content>
+              <Text style={styles.subSection}>WhatsApp Receipts</Text>
+              <Text style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>When enabled, a WhatsApp share button appears on the POS checkout screen.</Text>
+              <View style={styles.envRow}>
+                <Button mode={waEnabled ? 'contained' : 'outlined'} onPress={() => setWaEnabled(true)} compact style={{ flex: 1, backgroundColor: waEnabled ? '#25D366' : undefined }}>Enabled</Button>
+                <Button mode={!waEnabled ? 'contained' : 'outlined'} onPress={() => setWaEnabled(false)} compact style={{ flex: 1 }}>Disabled</Button>
+              </View>
+
+              <Text style={[styles.subSection, { marginTop: 16 }]}>Africa's Talking — SMS</Text>
+              <Text style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>Send SMS receipts via Africa's Talking. Register at africastalking.com</Text>
+              <TextInput label="API Key" value={atsApiKey} onChangeText={setAtsApiKey} mode="outlined" style={styles.input} autoCapitalize="none" secureTextEntry />
+              <TextInput label="Sender ID (shortcode)" value={atsSenderId} onChangeText={setAtsSenderId} mode="outlined" style={styles.input} />
+              <Button mode="outlined" onPress={handleSaveIntegrations} loading={savingIntegrations} style={{ marginTop: 4 }}>Save Integration Settings</Button>
+            </Card.Content>
+          </Card>
 
           <Divider style={{ marginVertical: 24 }} />
 
@@ -363,6 +522,47 @@ export default function SettingsScreen() {
           <Dialog.Actions><Button onPress={() => setShiftHistoryOpen(false)}>Close</Button></Dialog.Actions>
         </Dialog>
 
+        {/* Cash Drawer Entry Dialog */}
+        <Dialog visible={drawerEntryOpen} onDismiss={() => setDrawerEntryOpen(false)}>
+          <Dialog.Title>{drawerType === 'IN' ? 'Cash In' : 'Cash Out'}</Dialog.Title>
+          <Dialog.Content>
+            <TextInput label="Amount (KES)" value={drawerAmount} onChangeText={setDrawerAmount} mode="outlined" keyboardType="numeric" style={{ marginBottom: 10 }} />
+            <TextInput label="Reason / Note" value={drawerNote} onChangeText={setDrawerNote} mode="outlined" />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setDrawerEntryOpen(false)}>Cancel</Button>
+            <Button mode="contained" onPress={() => addDrawerEntry.mutate()} loading={addDrawerEntry.isPending} style={{ backgroundColor: drawerType === 'IN' ? '#22c55e' : '#e53935' }}>
+              {drawerType === 'IN' ? 'Add Cash' : 'Remove Cash'}
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Cash Drawer Log Dialog */}
+        <Dialog visible={drawerLogOpen} onDismiss={() => setDrawerLogOpen(false)}>
+          <Dialog.Title>Cash Drawer Log</Dialog.Title>
+          <Dialog.Content>
+            <ScrollView style={{ maxHeight: 420 }}>
+              {(drawerLog ?? []).map((entry) => (
+                <View key={entry.id} style={styles.logRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.logProduct}>{entry.reason || (entry.type === 'IN' ? 'Cash In' : 'Cash Out')}</Text>
+                    <Text style={styles.logReason}>{entry.cashier_name}</Text>
+                    <Text style={styles.logTime}>{dayjs(entry.created_at).format('D MMM HH:mm')}</Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.logQty, { color: entry.type === 'IN' ? '#22c55e' : '#e53935' }]}>
+                      {entry.type === 'IN' ? '+' : '-'}{fmt(entry.amount)}
+                    </Text>
+                    <Text style={styles.logBalance}>Bal: {fmt(entry.balance_after)}</Text>
+                  </View>
+                </View>
+              ))}
+              {(drawerLog ?? []).length === 0 && <Text style={{ color: '#aaa', textAlign: 'center', padding: 20 }}>No drawer movements yet.</Text>}
+            </ScrollView>
+          </Dialog.Content>
+          <Dialog.Actions><Button onPress={() => setDrawerLogOpen(false)}>Close</Button></Dialog.Actions>
+        </Dialog>
+
         {/* Stock Log Dialog */}
         <Dialog visible={stockLogOpen} onDismiss={() => setStockLogOpen(false)}>
           <Dialog.Title>Stock Movement Log</Dialog.Title>
@@ -415,4 +615,10 @@ const styles = StyleSheet.create({
   logTime: { fontSize: 10, color: '#aaa', marginTop: 1 },
   logQty: { fontSize: 15, fontWeight: '800' },
   logBalance: { fontSize: 10, color: '#888', marginTop: 2 },
+  drawerBalance: { alignItems: 'center', paddingVertical: 12 },
+  drawerLabel: { fontSize: 12, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 },
+  drawerAmt: { fontSize: 28, fontWeight: '800', color: brand.primary, marginTop: 4 },
+  drawerBtns: { flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 4 },
+  subSection: { fontSize: 12, fontWeight: '700', color: '#555', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 4 },
+  envRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
 });

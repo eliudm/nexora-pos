@@ -12,6 +12,12 @@ export interface CartItem {
   total: number;
 }
 
+export interface SplitPayment {
+  cash: number;
+  mpesa: number;
+  mpesaRef?: string;
+}
+
 export interface Sale {
   id: number;
   invoice_no: string;
@@ -24,7 +30,11 @@ export interface Sale {
   discount: number;
   total: number;
   payment_method: string;
+  split_cash: number;
+  split_mpesa: number;
   mpesa_ref: string | null;
+  loyalty_points_earned: number;
+  loyalty_points_redeemed: number;
   status: string;
   note: string | null;
   created_at: string;
@@ -47,24 +57,32 @@ export const salesQueries = {
       customerId?: number;
       cashierId?: number;
       discount?: number;
+      loyaltyDiscount?: number;
       paymentMethod: string;
+      splitPayment?: SplitPayment;
       mpesaRef?: string;
       note?: string;
+      loyaltyPointsRedeemed?: number;
     },
   ): Promise<number> => {
     const db = await getDb();
     const subtotal = items.reduce((s, i) => s + i.unit_price * i.qty - i.discount, 0);
     const taxAmount = items.reduce((s, i) => s + i.vat_amount, 0);
-    const discount = opts.discount ?? 0;
+    const discount = (opts.discount ?? 0) + (opts.loyaltyDiscount ?? 0);
     const total = subtotal + taxAmount - discount;
     const invoiceNo = await nextInvoiceNo();
 
+    const splitCash = opts.splitPayment?.cash ?? 0;
+    const splitMpesa = opts.splitPayment?.mpesa ?? 0;
+    const mpesaRef = opts.splitPayment?.mpesaRef ?? opts.mpesaRef ?? null;
+
     const result = await db.runAsync(
-      `INSERT INTO sales (invoice_no, customer_id, cashier_id, subtotal, tax_amount, discount, total, payment_method, mpesa_ref, note)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO sales (invoice_no, customer_id, cashier_id, subtotal, tax_amount, discount, total, payment_method, split_cash, split_mpesa, mpesa_ref, loyalty_points_redeemed, note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [invoiceNo, opts.customerId ?? null, opts.cashierId ?? null,
        subtotal, taxAmount, discount, total,
-       opts.paymentMethod, opts.mpesaRef ?? null, opts.note ?? null],
+       opts.paymentMethod, splitCash, splitMpesa, mpesaRef,
+       opts.loyaltyPointsRedeemed ?? 0, opts.note ?? null],
     );
 
     const saleId = result.lastInsertRowId;
@@ -96,6 +114,19 @@ export const salesQueries = {
         'UPDATE customers SET credit_balance = credit_balance - ? WHERE id = ?',
         [total, opts.customerId],
       );
+    }
+
+    // Earn loyalty points for customer
+    if (opts.customerId) {
+      const points = Math.floor(total * (1 / 100));
+      if (points > 0) {
+        await db.runAsync('UPDATE customers SET loyalty_points = loyalty_points + ? WHERE id = ?', [points, opts.customerId]);
+        await db.runAsync(
+          'INSERT INTO loyalty_transactions (customer_id, sale_id, points_change, type, note) VALUES (?, ?, ?, ?, ?)',
+          [opts.customerId, saleId, points, 'EARN', `Sale ${invoiceNo}`],
+        );
+        await db.runAsync('UPDATE sales SET loyalty_points_earned = ? WHERE id = ?', [points, saleId]);
+      }
     }
 
     return saleId;

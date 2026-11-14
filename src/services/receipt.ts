@@ -32,6 +32,9 @@ export interface ReceiptSale {
   total: number;
   payment_method: string;
   mpesa_ref?: string | null;
+  split_cash?: number;
+  split_mpesa?: number;
+  etims_qr?: string | null;
   items: Array<{
     product_name: string;
     qty: number;
@@ -95,7 +98,13 @@ export function buildReceiptText(sale: ReceiptSale, biz: BusinessInfo): string {
   r += divider('=');
 
   // Payment
-  r += `[L]${pad('Payment', sale.payment_method)}\n`;
+  if (sale.payment_method === 'SPLIT') {
+    r += `[L]${pad('Payment', 'SPLIT')}\n`;
+    if (sale.split_cash && sale.split_cash > 0) r += `[L]${pad('  Cash', `KES ${sale.split_cash.toFixed(0)}`)}\n`;
+    if (sale.split_mpesa && sale.split_mpesa > 0) r += `[L]${pad('  M-Pesa', `KES ${sale.split_mpesa.toFixed(0)}`)}\n`;
+  } else {
+    r += `[L]${pad('Payment', sale.payment_method)}\n`;
+  }
   if (sale.mpesa_ref) r += `[L]${pad('M-Pesa Ref', sale.mpesa_ref)}\n`;
 
   // M-Pesa details for future payments
@@ -104,6 +113,13 @@ export function buildReceiptText(sale: ReceiptSale, biz: BusinessInfo): string {
     r += `[C]PAY VIA M-PESA\n`;
     if (biz.mpesaTill)    r += `[C]Till: ${biz.mpesaTill}\n`;
     if (biz.mpesaPaybill) r += `[C]Paybill: ${biz.mpesaPaybill}\n`;
+  }
+
+  // eTIMS KRA QR code (if present)
+  if (sale.etims_qr) {
+    r += divider();
+    r += `[C]KRA eTIMS VERIFIED\n`;
+    r += `[C]${sale.etims_qr}\n`;
   }
 
   r += divider();

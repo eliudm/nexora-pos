@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, FlatList, Alert, Pressable, TextInput as RNTextInput, Platform } from 'react-native';
-import { Text, Button, Appbar, Searchbar, Chip, Portal, Dialog, RadioButton, ActivityIndicator, IconButton } from 'react-native-paper';
+import { Text, Button, Appbar, Searchbar, Chip, Portal, Dialog, RadioButton, ActivityIndicator, IconButton, Badge } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -9,8 +9,10 @@ import * as Sharing from 'expo-sharing';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
 import { productQueries, Product } from '../../src/db/products';
-import { salesQueries, CartItem } from '../../src/db/sales';
+import { salesQueries, CartItem, SplitPayment } from '../../src/db/sales';
 import { customerQueries, Customer } from '../../src/db/customers';
+import { holdSalesQueries, HoldSale } from '../../src/db/hold_sales';
+import { loyaltyQueries, KES_PER_POINT } from '../../src/db/loyalty';
 import { getBusinessInfo } from '../../src/db/settings';
 import { useSession } from '../../src/context/session';
 import { etimsService } from '../../src/services/etims';
@@ -18,24 +20,52 @@ import { printerService } from '../../src/services/printer';
 import { buildReceiptText, buildReceiptHtml, ReceiptSale } from '../../src/services/receipt';
 import { brand } from '../../src/theme';
 
-const PAYMENT_METHODS = ['CASH', 'MPESA', 'CREDIT'] as const;
+const PAYMENT_METHODS = ['CASH', 'MPESA', 'SPLIT', 'CREDIT'] as const;
 type PM = typeof PAYMENT_METHODS[number];
 
 export default function POSScreen() {
   const qc = useQueryClient();
   const { user } = useSession();
+
+  // Core POS state
   const [search, setSearch] = useState('');
   const [selectedCat, setSelectedCat] = useState<number | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
+
+  // Checkout
   const [checkoutVisible, setCheckoutVisible] = useState(false);
   const [payMethod, setPayMethod] = useState<PM>('CASH');
   const [mpesaRef, setMpesaRef] = useState('');
   const [discount, setDiscount] = useState('');
+  const [splitCash, setSplitCash] = useState('');
+  const [splitMpesa, setSplitMpesa] = useState('');
+  const [splitMpesaRef, setSplitMpesaRef] = useState('');
+
+  // Customer & loyalty
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
+  const [loyaltyBalance, setLoyaltyBalance] = useState(0);
+  const [redeemPoints, setRedeemPoints] = useState('');
+
+  // Hold/Park
+  const [holdDialogOpen, setHoldDialogOpen] = useState(false);
+  const [holdLabel, setHoldLabel] = useState('');
+  const [resumeDialogOpen, setResumeDialogOpen] = useState(false);
+
+  // Quantity input dialog
+  const [qtyDialogItem, setQtyDialogItem] = useState<CartItem | null>(null);
+  const [qtyInput, setQtyInput] = useState('');
+
+  // Item discount dialog
+  const [itemDiscountItem, setItemDiscountItem] = useState<CartItem | null>(null);
+  const [itemDiscountInput, setItemDiscountInput] = useState('');
+
+  // Scanner
   const [scannerVisible, setScannerVisible] = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+
+  // M-Pesa
   const [stkPhone, setStkPhone] = useState('');
   const [stkLoading, setStkLoading] = useState(false);
   const lastScanRef = useRef<string>('');
@@ -56,6 +86,12 @@ export default function POSScreen() {
     enabled: customerDialogOpen,
   });
 
+  const { data: holdSales, refetch: refetchHolds } = useQuery({
+    queryKey: ['hold-sales'],
+    queryFn: holdSalesQueries.getAll,
+    enabled: resumeDialogOpen,
+  });
+
   const { data: bizInfo } = useQuery({
     queryKey: ['biz-info'],
     queryFn: getBusinessInfo,
@@ -73,24 +109,31 @@ export default function POSScreen() {
       setCheckoutVisible(false);
       setMpesaRef('');
       setDiscount('');
+      setSplitCash('');
+      setSplitMpesa('');
+      setSplitMpesaRef('');
       setSelectedCustomer(null);
+      setLoyaltyBalance(0);
+      setRedeemPoints('');
       setStkPhone('');
       if (sale) {
-        // Submit to eTIMS silently in background
         etimsService.submitSale(sale as any).catch(() => {});
         await printReceipt(sale);
       }
     },
   });
 
+  // ---- Cart helpers ----
+
   const addToCart = useCallback((product: Product) => {
     setCart((prev) => {
       const existing = prev.find((i) => i.product_id === product.id);
       if (existing) {
         const qty = existing.qty + 1;
+        const vatAmt = existing.unit_price * qty * (existing.vat_rate / 100);
         return prev.map((i) =>
           i.product_id === product.id
-            ? { ...i, qty, vat_amount: i.unit_price * qty * (i.vat_rate / 100), total: i.unit_price * qty * (1 + i.vat_rate / 100) }
+            ? { ...i, qty, vat_amount: vatAmt, total: existing.unit_price * qty + vatAmt - i.discount }
             : i,
         );
       }
@@ -107,23 +150,34 @@ export default function POSScreen() {
 
   const updateQty = (productId: number, qty: number) => {
     if (qty <= 0) { removeFromCart(productId); return; }
-    setCart((prev) => prev.map((i) =>
-      i.product_id === productId
-        ? { ...i, qty, vat_amount: i.unit_price * qty * (i.vat_rate / 100), total: i.unit_price * qty * (1 + i.vat_rate / 100) }
-        : i,
-    ));
+    setCart((prev) => prev.map((i) => {
+      if (i.product_id !== productId) return i;
+      const vatAmt = i.unit_price * qty * (i.vat_rate / 100);
+      return { ...i, qty, vat_amount: vatAmt, total: i.unit_price * qty + vatAmt - i.discount };
+    }));
+  };
+
+  const applyItemDiscount = (productId: number, discountAmt: number) => {
+    setCart((prev) => prev.map((i) => {
+      if (i.product_id !== productId) return i;
+      const baseTotal = i.unit_price * i.qty * (1 + i.vat_rate / 100);
+      return { ...i, discount: discountAmt, total: Math.max(0, baseTotal - discountAmt) };
+    }));
   };
 
   const subtotal = cart.reduce((s, i) => s + i.unit_price * i.qty, 0);
   const tax = cart.reduce((s, i) => s + i.vat_amount, 0);
-  const disc = parseFloat(discount) || 0;
-  const total = subtotal + tax - disc;
+  const itemDiscountTotal = cart.reduce((s, i) => s + i.discount, 0);
+  const orderDiscount = parseFloat(discount) || 0;
+  const pointsRedeemed = parseInt(redeemPoints) || 0;
+  const loyaltyDiscount = pointsRedeemed * KES_PER_POINT;
+  const total = Math.max(0, subtotal + tax - itemDiscountTotal - orderDiscount - loyaltyDiscount);
 
   const filteredProducts = selectedCat
     ? (products ?? []).filter((p) => p.category_id === selectedCat)
     : products ?? [];
 
-  // Barcode scanner
+  // ---- Barcode scanner ----
   const openScanner = async () => {
     if (!cameraPermission?.granted) {
       const result = await requestCameraPermission();
@@ -145,10 +199,55 @@ export default function POSScreen() {
     setTimeout(() => { lastScanRef.current = ''; }, 2000);
   };
 
-  // Receipt printing — tries thermal printer first, falls back to system print/PDF share
+  // ---- Hold/Park sale ----
+  const holdSale = async () => {
+    if (cart.length === 0) return;
+    await holdSalesQueries.save(cart, {
+      label: holdLabel.trim() || undefined,
+      customerId: selectedCustomer?.id,
+      customerName: selectedCustomer?.name,
+      cashierId: user?.id,
+    });
+    setCart([]);
+    setSelectedCustomer(null);
+    setHoldLabel('');
+    setHoldDialogOpen(false);
+    Alert.alert('Sale Held', 'Sale parked. You can resume it from the hold list.');
+  };
+
+  const resumeHeldSale = (held: HoldSale) => {
+    if (cart.length > 0) {
+      Alert.alert('Replace Cart?', 'Your current cart will be cleared.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Replace', onPress: () => { doResume(held); } },
+      ]);
+    } else {
+      doResume(held);
+    }
+  };
+
+  const doResume = async (held: HoldSale) => {
+    setCart(held.items ?? []);
+    if (held.customer_id) {
+      const c = await customerQueries.getById(held.customer_id);
+      if (c) setSelectedCustomer(c);
+    }
+    await holdSalesQueries.delete(held.id);
+    setResumeDialogOpen(false);
+    refetchHolds();
+  };
+
+  // ---- Loyalty ----
+  const onCustomerSelected = async (c: Customer) => {
+    setSelectedCustomer(c);
+    setCustomerDialogOpen(false);
+    const bal = await loyaltyQueries.getBalance(c.id);
+    setLoyaltyBalance(bal);
+  };
+
+  // ---- Receipt printing ----
   const printReceipt = async (sale: any) => {
     if (!bizInfo) return;
-
     const receiptSale: ReceiptSale = {
       invoice_no: sale.invoice_no,
       created_at: sale.created_at,
@@ -160,12 +259,11 @@ export default function POSScreen() {
       total: sale.total,
       payment_method: sale.payment_method,
       mpesa_ref: sale.mpesa_ref,
+      split_cash: sale.split_cash,
+      split_mpesa: sale.split_mpesa,
       items: sale.items ?? [],
     };
-
     const printerConfig = await printerService.getConfig();
-
-    // If a thermal printer is configured, try it first
     if (printerConfig.type !== 'none') {
       const text = buildReceiptText(receiptSale, {
         name: bizInfo.name ?? '',
@@ -176,24 +274,14 @@ export default function POSScreen() {
         mpesaPaybill: bizInfo.mpesaPaybill,
         mpesaTill: bizInfo.mpesaTill,
       });
-
       const result = await printerService.print(text);
-
-      if (result.success) return; // printed — done
-
-      // Printer failed — ask user what to do
-      Alert.alert(
-        'Printer Error',
-        `Could not print to ${printerConfig.name || printerConfig.type} printer.\n\n${result.error}\n\nWhat would you like to do?`,
-        [
-          { text: 'Share PDF', onPress: () => fallbackPrint(receiptSale) },
-          { text: 'Skip', style: 'cancel' },
-        ],
-      );
+      if (result.success) return;
+      Alert.alert('Printer Error', `${result.error}\n\nWhat would you like to do?`, [
+        { text: 'Share PDF', onPress: () => fallbackPrint(receiptSale) },
+        { text: 'Skip', style: 'cancel' },
+      ]);
       return;
     }
-
-    // No thermal printer configured — go straight to share options
     fallbackPrint(receiptSale);
   };
 
@@ -208,8 +296,7 @@ export default function POSScreen() {
       mpesaPaybill: bizInfo.mpesaPaybill,
       mpesaTill: bizInfo.mpesaTill,
     });
-
-    Alert.alert('No Printer Configured', 'Set up a thermal printer in Settings, or:', [
+    Alert.alert('Receipt', 'Share or print receipt:', [
       { text: 'Print via System', onPress: async () => { await Print.printAsync({ html }); } },
       { text: 'Share as PDF', onPress: async () => {
         const { uri } = await Print.printToFileAsync({ html });
@@ -219,7 +306,7 @@ export default function POSScreen() {
     ]);
   };
 
-  // M-Pesa STK Push
+  // ---- M-Pesa STK Push ----
   const handleStkPush = async () => {
     if (!stkPhone.trim()) { Alert.alert('Phone Required', 'Enter the customer phone number.'); return; }
     if (!bizInfo?.mpesaPaybill && !bizInfo?.mpesaTill) {
@@ -227,35 +314,55 @@ export default function POSScreen() {
       return;
     }
     setStkLoading(true);
-    try {
-      // STK Push requires a backend/proxy with Daraja API credentials.
-      // In standalone mode we show a manual prompt instead.
-      Alert.alert(
-        'M-Pesa Payment',
-        `Ask customer to send KES ${total.toFixed(0)} to:\n\n` +
-        (bizInfo.mpesaTill ? `Till: ${bizInfo.mpesaTill}` : `Paybill: ${bizInfo.mpesaPaybill}`) +
-        `\n\nThen enter the confirmation code below.`,
-      );
-    } finally {
-      setStkLoading(false);
-    }
+    Alert.alert(
+      'M-Pesa Payment',
+      `Ask customer to send KES ${total.toFixed(0)} to:\n\n` +
+      (bizInfo.mpesaTill ? `Till: ${bizInfo.mpesaTill}` : `Paybill: ${bizInfo.mpesaPaybill}`) +
+      `\n\nThen enter the confirmation code below.`,
+    );
+    setStkLoading(false);
   };
 
+  // ---- Confirm sale ----
   const handleConfirmSale = () => {
     if (payMethod === 'MPESA' && !mpesaRef.trim()) {
       Alert.alert('M-Pesa Reference', 'Please enter the M-Pesa transaction code.');
       return;
     }
+    if (payMethod === 'SPLIT') {
+      const c = parseFloat(splitCash) || 0;
+      const m = parseFloat(splitMpesa) || 0;
+      if (c + m < total - 0.01) {
+        Alert.alert('Insufficient', `Cash + M-Pesa must cover KES ${total.toFixed(0)}.\nEntered: ${(c+m).toFixed(0)}`);
+        return;
+      }
+      if (m > 0 && !splitMpesaRef.trim()) {
+        Alert.alert('M-Pesa Reference', 'Enter the M-Pesa transaction code for the M-Pesa portion.');
+        return;
+      }
+    }
     if (payMethod === 'CREDIT' && !selectedCustomer) {
       Alert.alert('Customer Required', 'Select a customer for credit sales.');
       return;
     }
+    if (pointsRedeemed > loyaltyBalance) {
+      Alert.alert('Insufficient Points', `Customer only has ${loyaltyBalance} points.`);
+      return;
+    }
+
+    const splitPayment: SplitPayment | undefined = payMethod === 'SPLIT'
+      ? { cash: parseFloat(splitCash) || 0, mpesa: parseFloat(splitMpesa) || 0, mpesaRef: splitMpesaRef.trim() || undefined }
+      : undefined;
+
     mutation.mutate({
       items: cart,
       opts: {
         paymentMethod: payMethod,
+        splitPayment,
         mpesaRef: mpesaRef.trim() || undefined,
-        discount: disc,
+        discount: orderDiscount,
+        loyaltyDiscount: loyaltyDiscount > 0 ? loyaltyDiscount : undefined,
+        loyaltyPointsRedeemed: pointsRedeemed > 0 ? pointsRedeemed : undefined,
         customerId: selectedCustomer?.id,
         cashierId: user?.id,
       },
@@ -271,6 +378,9 @@ export default function POSScreen() {
             <Appbar.Content title="Point of Sale" titleStyle={styles.headerTitle} />
             {user && <Text style={styles.cashierBadge}>{user.name}</Text>}
             <Appbar.Action icon="barcode-scan" color="#fff" onPress={openScanner} />
+            <View>
+              <Appbar.Action icon="pause-circle-outline" color="#fff" onPress={() => setResumeDialogOpen(true)} />
+            </View>
           </Appbar.Header>
 
           <Searchbar
@@ -342,6 +452,13 @@ export default function POSScreen() {
             </Pressable>
           </View>
 
+          {selectedCustomer && loyaltyBalance > 0 && (
+            <View style={styles.loyaltyBanner}>
+              <MaterialCommunityIcons name="star-circle" size={16} color="#f59e0b" />
+              <Text style={styles.loyaltyText}>{loyaltyBalance} pts = KES {(loyaltyBalance * KES_PER_POINT).toFixed(0)}</Text>
+            </View>
+          )}
+
           <FlatList
             data={cart}
             keyExtractor={(i) => String(i.product_id)}
@@ -350,18 +467,30 @@ export default function POSScreen() {
               <View style={styles.cartItem}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cartItemName} numberOfLines={1}>{item.product_name}</Text>
-                  <Text style={styles.cartItemPrice}>KES {item.unit_price.toLocaleString()}</Text>
+                  <View style={{ flexDirection: 'row', gap: 6, marginTop: 2 }}>
+                    <Text style={styles.cartItemPrice}>KES {item.unit_price.toLocaleString()}</Text>
+                    {item.discount > 0 && (
+                      <Text style={styles.itemDiscount}>-{item.discount.toFixed(0)}</Text>
+                    )}
+                  </View>
                 </View>
                 <View style={styles.qtyRow}>
                   <Pressable style={styles.qtyBtn} onPress={() => updateQty(item.product_id, item.qty - 1)}>
                     <Text style={styles.qtyBtnText}>−</Text>
                   </Pressable>
-                  <Text style={styles.qtyVal}>{item.qty}</Text>
+                  <Pressable onLongPress={() => { setQtyDialogItem(item); setQtyInput(String(item.qty)); }}>
+                    <Text style={styles.qtyVal}>{item.qty}</Text>
+                  </Pressable>
                   <Pressable style={styles.qtyBtn} onPress={() => updateQty(item.product_id, item.qty + 1)}>
                     <Text style={styles.qtyBtnText}>+</Text>
                   </Pressable>
                 </View>
-                <Text style={styles.cartItemTotal}>KES {item.total.toFixed(0)}</Text>
+                <Pressable onPress={() => { setItemDiscountItem(item); setItemDiscountInput(String(item.discount || '')); }}>
+                  <Text style={styles.cartItemTotal}>KES {item.total.toFixed(0)}</Text>
+                </Pressable>
+                <Pressable onPress={() => removeFromCart(item.product_id)} style={{ padding: 4 }}>
+                  <MaterialCommunityIcons name="close-circle" size={18} color="#ccc" />
+                </Pressable>
               </View>
             )}
             ListEmptyComponent={
@@ -376,16 +505,37 @@ export default function POSScreen() {
           <View style={styles.totals}>
             <View style={styles.totalRow}><Text style={styles.totalLabel}>Subtotal</Text><Text style={styles.totalVal}>KES {subtotal.toLocaleString()}</Text></View>
             <View style={styles.totalRow}><Text style={styles.totalLabel}>VAT</Text><Text style={styles.totalVal}>KES {tax.toFixed(0)}</Text></View>
-            {disc > 0 && <View style={styles.totalRow}><Text style={styles.totalLabel}>Discount</Text><Text style={[styles.totalVal, { color: '#e53935' }]}>-KES {disc}</Text></View>}
+            {itemDiscountTotal > 0 && <View style={styles.totalRow}><Text style={styles.totalLabel}>Item Discounts</Text><Text style={[styles.totalVal, { color: '#e53935' }]}>-KES {itemDiscountTotal.toFixed(0)}</Text></View>}
+            {orderDiscount > 0 && <View style={styles.totalRow}><Text style={styles.totalLabel}>Order Discount</Text><Text style={[styles.totalVal, { color: '#e53935' }]}>-KES {orderDiscount}</Text></View>}
+            {loyaltyDiscount > 0 && <View style={styles.totalRow}><Text style={styles.totalLabel}>Loyalty Discount</Text><Text style={[styles.totalVal, { color: '#f59e0b' }]}>-KES {loyaltyDiscount.toFixed(0)}</Text></View>}
             <View style={[styles.totalRow, styles.grandTotal]}>
               <Text style={styles.grandLabel}>TOTAL</Text>
               <Text style={styles.grandVal}>KES {total.toFixed(0)}</Text>
             </View>
           </View>
 
-          <Button mode="contained" onPress={() => setCheckoutVisible(true)} disabled={cart.length === 0} style={styles.checkoutBtn} contentStyle={{ height: 50 }} labelStyle={{ fontSize: 16, fontWeight: '700' }}>
-            Checkout
-          </Button>
+          <View style={styles.cartActions}>
+            <Button
+              mode="outlined"
+              compact
+              onPress={() => setHoldDialogOpen(true)}
+              disabled={cart.length === 0}
+              style={styles.holdBtn}
+              icon="pause"
+            >
+              Hold
+            </Button>
+            <Button
+              mode="contained"
+              onPress={() => setCheckoutVisible(true)}
+              disabled={cart.length === 0}
+              style={styles.checkoutBtn}
+              contentStyle={{ height: 46 }}
+              labelStyle={{ fontSize: 15, fontWeight: '700' }}
+            >
+              Checkout
+            </Button>
+          </View>
         </View>
       </View>
 
@@ -414,15 +564,110 @@ export default function POSScreen() {
           <Dialog.Content>
             <Searchbar placeholder="Search..." value={customerSearch} onChangeText={setCustomerSearch} style={{ marginBottom: 8 }} />
             {(customers ?? []).slice(0, 6).map((c) => (
-              <Pressable key={c.id} style={styles.customerRow} onPress={() => { setSelectedCustomer(c); setCustomerDialogOpen(false); }}>
+              <Pressable key={c.id} style={styles.customerRow} onPress={() => onCustomerSelected(c)}>
                 <Text style={styles.customerName}>{c.name}</Text>
-                <Text style={styles.customerPhone}>{c.phone}</Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <Text style={styles.customerPhone}>{c.phone}</Text>
+                  {c.loyalty_points > 0 && (
+                    <Text style={styles.customerPoints}>{c.loyalty_points} pts</Text>
+                  )}
+                </View>
               </Pressable>
             ))}
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => { setSelectedCustomer(null); setCustomerDialogOpen(false); }}>Clear</Button>
+            <Button onPress={() => { setSelectedCustomer(null); setLoyaltyBalance(0); setCustomerDialogOpen(false); }}>Clear</Button>
             <Button onPress={() => setCustomerDialogOpen(false)}>Done</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Quantity Input Dialog (long-press qty) */}
+        <Dialog visible={!!qtyDialogItem} onDismiss={() => setQtyDialogItem(null)}>
+          <Dialog.Title>Set Quantity</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ marginBottom: 8, color: '#555' }}>{qtyDialogItem?.product_name}</Text>
+            <RNTextInput
+              value={qtyInput}
+              onChangeText={setQtyInput}
+              keyboardType="decimal-pad"
+              style={styles.mpesaInput}
+              autoFocus
+              placeholder="Enter quantity"
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setQtyDialogItem(null)}>Cancel</Button>
+            <Button mode="contained" onPress={() => {
+              const q = parseFloat(qtyInput);
+              if (qtyDialogItem && !isNaN(q)) updateQty(qtyDialogItem.product_id, q);
+              setQtyDialogItem(null);
+            }}>Set</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Item Discount Dialog (tap item total) */}
+        <Dialog visible={!!itemDiscountItem} onDismiss={() => setItemDiscountItem(null)}>
+          <Dialog.Title>Item Discount</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ marginBottom: 4, color: '#555' }}>{itemDiscountItem?.product_name}</Text>
+            <Text style={{ marginBottom: 8, fontSize: 12, color: '#888' }}>Line total: KES {((itemDiscountItem?.unit_price ?? 0) * (itemDiscountItem?.qty ?? 1) * (1 + (itemDiscountItem?.vat_rate ?? 0) / 100)).toFixed(0)}</Text>
+            <RNTextInput
+              value={itemDiscountInput}
+              onChangeText={setItemDiscountInput}
+              keyboardType="decimal-pad"
+              style={styles.mpesaInput}
+              autoFocus
+              placeholder="Discount amount (KES)"
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => { if (itemDiscountItem) applyItemDiscount(itemDiscountItem.product_id, 0); setItemDiscountItem(null); }}>Remove</Button>
+            <Button mode="contained" onPress={() => {
+              const d = parseFloat(itemDiscountInput) || 0;
+              if (itemDiscountItem) applyItemDiscount(itemDiscountItem.product_id, d);
+              setItemDiscountItem(null);
+            }}>Apply</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Hold Sale Dialog */}
+        <Dialog visible={holdDialogOpen} onDismiss={() => setHoldDialogOpen(false)}>
+          <Dialog.Title>Hold Sale</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ color: '#555', marginBottom: 10 }}>Park this sale and serve another customer. Resume it later.</Text>
+            <RNTextInput
+              placeholder="Label (optional, e.g. Table 5)"
+              value={holdLabel}
+              onChangeText={setHoldLabel}
+              style={styles.mpesaInput}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setHoldDialogOpen(false)}>Cancel</Button>
+            <Button mode="contained" onPress={holdSale} icon="pause">Hold Sale</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Resume Held Sales Dialog */}
+        <Dialog visible={resumeDialogOpen} onDismiss={() => setResumeDialogOpen(false)}>
+          <Dialog.Title>Held Sales</Dialog.Title>
+          <Dialog.Content>
+            {(holdSales?.length ?? 0) === 0 ? (
+              <Text style={{ color: '#888', textAlign: 'center', paddingVertical: 16 }}>No held sales</Text>
+            ) : (
+              holdSales!.map((h) => (
+                <Pressable key={h.id} style={styles.holdRow} onPress={() => resumeHeldSale(h)}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.holdLabel}>{h.label || `Held at ${dayjs(h.created_at).format('HH:mm')}`}</Text>
+                    <Text style={styles.holdSub}>{h.customer_name ?? 'No customer'} · {(h.items?.length ?? 0)} items</Text>
+                  </View>
+                  <MaterialCommunityIcons name="play-circle" size={24} color={brand.primary} />
+                </Pressable>
+              ))
+            )}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setResumeDialogOpen(false)}>Close</Button>
           </Dialog.Actions>
         </Dialog>
 
@@ -431,11 +676,15 @@ export default function POSScreen() {
           <Dialog.Title>Payment — KES {total.toFixed(0)}</Dialog.Title>
           <Dialog.Content>
             {selectedCustomer && (
-              <Text style={styles.checkoutCustomer}>Customer: {selectedCustomer.name} (Balance: KES {selectedCustomer.credit_balance.toLocaleString()})</Text>
+              <Text style={styles.checkoutCustomer}>
+                {selectedCustomer.name}  ·  Balance: KES {selectedCustomer.credit_balance.toLocaleString()}  ·  {loyaltyBalance} pts
+              </Text>
             )}
             <Text style={{ marginBottom: 8, fontWeight: '600' }}>Payment Method</Text>
             <RadioButton.Group value={payMethod} onValueChange={(v) => setPayMethod(v as PM)}>
-              {PAYMENT_METHODS.map((m) => <RadioButton.Item key={m} label={m} value={m} />)}
+              {PAYMENT_METHODS.map((m) => (
+                <RadioButton.Item key={m} label={m === 'SPLIT' ? 'Split (Cash + M-Pesa)' : m} value={m} />
+              ))}
             </RadioButton.Group>
 
             {payMethod === 'MPESA' && (
@@ -460,13 +709,58 @@ export default function POSScreen() {
               </View>
             )}
 
+            {payMethod === 'SPLIT' && (
+              <View>
+                <Text style={styles.splitLabel}>Total: KES {total.toFixed(0)}</Text>
+                <RNTextInput
+                  placeholder="Cash amount"
+                  value={splitCash}
+                  onChangeText={(v) => {
+                    setSplitCash(v);
+                    const cashAmt = parseFloat(v) || 0;
+                    const remaining = Math.max(0, total - cashAmt);
+                    setSplitMpesa(remaining > 0 ? remaining.toFixed(0) : '');
+                  }}
+                  keyboardType="decimal-pad"
+                  style={styles.mpesaInput}
+                />
+                <RNTextInput
+                  placeholder="M-Pesa amount"
+                  value={splitMpesa}
+                  onChangeText={setSplitMpesa}
+                  keyboardType="decimal-pad"
+                  style={styles.mpesaInput}
+                />
+                <RNTextInput
+                  placeholder="M-Pesa Transaction Code"
+                  value={splitMpesaRef}
+                  onChangeText={setSplitMpesaRef}
+                  style={styles.mpesaInput}
+                  autoCapitalize="characters"
+                />
+              </View>
+            )}
+
             <RNTextInput
-              placeholder="Discount (KES)"
+              placeholder="Order Discount (KES)"
               value={discount}
               onChangeText={setDiscount}
               keyboardType="numeric"
               style={styles.mpesaInput}
             />
+
+            {selectedCustomer && loyaltyBalance > 0 && (
+              <View>
+                <Text style={styles.loyaltyInputLabel}>Redeem Loyalty Points (max {loyaltyBalance}, = KES {(loyaltyBalance * KES_PER_POINT).toFixed(0)})</Text>
+                <RNTextInput
+                  placeholder="Points to redeem"
+                  value={redeemPoints}
+                  onChangeText={setRedeemPoints}
+                  keyboardType="numeric"
+                  style={styles.mpesaInput}
+                />
+              </View>
+            )}
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setCheckoutVisible(false)}>Cancel</Button>
@@ -499,12 +793,15 @@ const styles = StyleSheet.create({
   productPrice: { fontSize: 14, fontWeight: '700', color: brand.primary, marginTop: 4 },
   stockBadge: { fontSize: 10, color: '#666', marginTop: 2 },
   lowStock: { color: '#e53935' },
-  cartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  cartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   cartTitle: { fontSize: 16, fontWeight: '700', color: '#111' },
   customerBtn: { fontSize: 12, color: brand.primary, fontWeight: '600' },
+  loyaltyBanner: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fffbeb', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, marginBottom: 6 },
+  loyaltyText: { fontSize: 12, color: '#92400e', fontWeight: '600' },
   cartItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
   cartItemName: { fontSize: 12, color: '#222' },
   cartItemPrice: { fontSize: 11, color: '#888' },
+  itemDiscount: { fontSize: 11, color: '#e53935', fontWeight: '600' },
   qtyRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 8 },
   qtyBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: brand.primary, alignItems: 'center', justifyContent: 'center' },
   qtyBtnText: { color: '#fff', fontSize: 18, fontWeight: '700', lineHeight: 24 },
@@ -520,11 +817,19 @@ const styles = StyleSheet.create({
   grandTotal: { paddingTop: 8, borderTopWidth: 1, borderTopColor: '#eee', marginTop: 4 },
   grandLabel: { fontSize: 16, fontWeight: '800', color: '#111' },
   grandVal: { fontSize: 16, fontWeight: '800', color: brand.primary },
-  checkoutBtn: { marginTop: 12, borderRadius: 10, backgroundColor: brand.primary },
+  cartActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  holdBtn: { flex: 1, borderColor: '#ccc' },
+  checkoutBtn: { flex: 2, borderRadius: 10, backgroundColor: brand.primary },
   mpesaInput: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10, marginTop: 10, fontSize: 14 },
   stkRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
+  splitLabel: { fontSize: 13, color: '#555', marginTop: 8, fontWeight: '600' },
   checkoutCustomer: { fontSize: 12, color: '#555', marginBottom: 10, backgroundColor: '#f5f5f5', padding: 8, borderRadius: 6 },
+  loyaltyInputLabel: { fontSize: 12, color: '#92400e', marginTop: 8, marginBottom: 2 },
   customerRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
   customerName: { fontSize: 14, fontWeight: '600', color: '#111' },
   customerPhone: { fontSize: 12, color: '#888' },
+  customerPoints: { fontSize: 12, color: '#f59e0b', fontWeight: '600' },
+  holdRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  holdLabel: { fontSize: 14, fontWeight: '600', color: '#111' },
+  holdSub: { fontSize: 12, color: '#888', marginTop: 2 },
 });

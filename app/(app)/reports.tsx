@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
-import { Text, Appbar, Card, Chip, Divider, Menu } from 'react-native-paper';
+import { Text, Appbar, Card, Chip, Divider, Menu, Button } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import * as Print from 'expo-print';
@@ -8,13 +8,17 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import dayjs from 'dayjs';
 import { salesQueries } from '../../src/db/sales';
+import { productQueries } from '../../src/db/products';
+import { customerQueries } from '../../src/db/customers';
 import { getBusinessInfo } from '../../src/db/settings';
 import { brand } from '../../src/theme';
 
 type Period = 'today' | 'week' | 'month';
+type ReportTab = 'sales' | 'profit' | 'stock' | 'customers' | 'vat';
 
 export default function ReportsScreen() {
   const [period, setPeriod] = useState<Period>('today');
+  const [reportTab, setReportTab] = useState<ReportTab>('sales');
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   const ranges: Record<Period, { from: string; to: string }> = {
@@ -47,6 +51,40 @@ export default function ReportsScreen() {
     queryKey: ['trend-report', period],
     queryFn: () => salesQueries.getRevenueTrend(period === 'today' ? 1 : period === 'week' ? 7 : 30),
   });
+
+  const { data: allProducts } = useQuery({
+    queryKey: ['products-report'],
+    queryFn: () => productQueries.getAll(),
+    enabled: reportTab === 'stock' || reportTab === 'profit',
+  });
+
+  const { data: allCustomers } = useQuery({
+    queryKey: ['customers-report'],
+    queryFn: () => customerQueries.getAll(),
+    enabled: reportTab === 'customers',
+  });
+
+  // Profit/loss data: revenue minus COGS estimate (cost × qty from sale_items × product cost ratio)
+  const totalCOGS = (() => {
+    if (!sales) return 0;
+    return (sales).reduce((s, sale) => {
+      const items = sale.items ?? [];
+      return s + items.reduce((si, item) => {
+        const prod = allProducts?.find((p) => p.id === item.product_id);
+        return si + (prod?.cost ?? 0) * item.qty;
+      }, 0);
+    }, 0);
+  })();
+
+  // Stock valuation
+  const stockAtCost = (allProducts ?? []).filter((p) => p.track_stock).reduce((s, p) => s + p.cost * p.stock_qty, 0);
+  const stockAtSell = (allProducts ?? []).filter((p) => p.track_stock).reduce((s, p) => s + p.price * p.stock_qty, 0);
+  const lowStockItems = (allProducts ?? []).filter((p) => p.track_stock && p.stock_qty <= ((p as any).low_stock_threshold ?? 5) && p.stock_qty > 0);
+  const outOfStockItems = (allProducts ?? []).filter((p) => p.track_stock && p.stock_qty <= 0);
+
+  // Customer debt
+  const debtCustomers = (allCustomers ?? []).filter((c) => c.credit_balance < 0);
+  const totalDebt = debtCustomers.reduce((s, c) => s + Math.abs(c.credit_balance), 0);
 
   const totalRevenue = (sales ?? []).reduce((s, x) => s + x.total, 0);
   const totalVAT = (sales ?? []).reduce((s, x) => s + x.tax_amount, 0);
@@ -116,25 +154,51 @@ export default function ReportsScreen() {
         </Menu>
       </Appbar.Header>
 
-      <View style={styles.tabs}>
-        {(['today', 'week', 'month'] as Period[]).map((p) => (
+      {/* Report Type Tabs */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.reportTabsScroll} contentContainerStyle={styles.reportTabsContent}>
+        {([
+          { key: 'sales', label: 'Sales' },
+          { key: 'profit', label: 'Profit/Loss' },
+          { key: 'stock', label: 'Stock Value' },
+          { key: 'customers', label: 'Customer Debt' },
+          { key: 'vat', label: 'VAT Report' },
+        ] as { key: ReportTab; label: string }[]).map((t) => (
           <Chip
-            key={p}
-            selected={period === p}
-            onPress={() => setPeriod(p)}
-            style={[styles.tab, period === p && styles.tabActive]}
-            textStyle={[styles.tabText, period === p && styles.tabTextActive]}
+            key={t.key}
+            selected={reportTab === t.key}
+            onPress={() => setReportTab(t.key)}
+            style={[styles.reportTab, reportTab === t.key && styles.reportTabActive]}
+            textStyle={[styles.tabText, reportTab === t.key && styles.tabTextActive]}
+            compact
           >
-            {p === 'today' ? 'Today' : p === 'week' ? 'This Week' : 'This Month'}
+            {t.label}
           </Chip>
         ))}
-      </View>
+      </ScrollView>
+
+      {/* Period Filter (only for time-sensitive reports) */}
+      {(['sales', 'profit', 'vat'] as ReportTab[]).includes(reportTab) && (
+        <View style={styles.tabs}>
+          {(['today', 'week', 'month'] as Period[]).map((p) => (
+            <Chip
+              key={p}
+              selected={period === p}
+              onPress={() => setPeriod(p)}
+              style={[styles.tab, period === p && styles.tabActive]}
+              textStyle={[styles.tabText, period === p && styles.tabTextActive]}
+            >
+              {p === 'today' ? 'Today' : p === 'week' ? 'This Week' : 'This Month'}
+            </Chip>
+          ))}
+        </View>
+      )}
 
       <ScrollView
         style={styles.scroll}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} colors={[brand.primary]} />}
       >
-        {/* Revenue Summary */}
+        {/* ---- Sales Report ---- */}
+        {reportTab === 'sales' && (<>
         <Card style={styles.card}>
           <Card.Title title="Revenue Summary" titleStyle={styles.cardTitle} />
           <Card.Content>
@@ -216,6 +280,121 @@ export default function ReportsScreen() {
             </Card.Content>
           </Card>
         )}
+        </>)}
+
+        {/* ---- Profit / Loss ---- */}
+        {reportTab === 'profit' && (
+          <>
+            <Card style={styles.card}>
+              <Card.Title title="Profit & Loss" titleStyle={styles.cardTitle} />
+              <Card.Content>
+                <View style={styles.bigStat}>
+                  <Text style={[styles.bigVal, { color: (totalRevenue - totalVAT - totalCOGS) >= 0 ? '#22c55e' : '#e53935' }]}>
+                    KES {(totalRevenue - totalVAT - totalCOGS).toLocaleString('en-KE', { maximumFractionDigits: 0 })}
+                  </Text>
+                  <Text style={styles.bigLabel}>Net Profit (est.)</Text>
+                </View>
+                <Divider style={{ marginVertical: 12 }} />
+                {[
+                  { label: 'Revenue (incl. VAT)', value: totalRevenue, color: brand.primary },
+                  { label: 'VAT Collected', value: -totalVAT, color: '#f59e0b' },
+                  { label: 'Revenue (excl. VAT)', value: totalRevenue - totalVAT, color: '#3b82f6' },
+                  { label: 'Est. Cost of Goods', value: -totalCOGS, color: '#e53935' },
+                ].map(({ label, value, color }) => (
+                  <View key={label} style={styles.plRow}>
+                    <Text style={styles.plLabel}>{label}</Text>
+                    <Text style={[styles.plVal, { color }]}>{value >= 0 ? '' : '-'}KES {Math.abs(value).toLocaleString('en-KE', { maximumFractionDigits: 0 })}</Text>
+                  </View>
+                ))}
+              </Card.Content>
+            </Card>
+          </>
+        )}
+
+        {/* ---- Stock Valuation ---- */}
+        {reportTab === 'stock' && (
+          <>
+            <Card style={styles.card}>
+              <Card.Title title="Stock Valuation" titleStyle={styles.cardTitle} />
+              <Card.Content>
+                <View style={styles.statsRow}>
+                  <View style={styles.stat}><Text style={styles.statVal}>{(allProducts ?? []).filter((p) => p.track_stock).length}</Text><Text style={styles.statLabel}>Tracked</Text></View>
+                  <View style={styles.stat}><Text style={[styles.statVal, { color: '#f59e0b' }]}>{lowStockItems.length}</Text><Text style={styles.statLabel}>Low Stock</Text></View>
+                  <View style={styles.stat}><Text style={[styles.statVal, { color: '#e53935' }]}>{outOfStockItems.length}</Text><Text style={styles.statLabel}>Out of Stock</Text></View>
+                </View>
+                <Divider style={{ marginVertical: 12 }} />
+                <View style={styles.plRow}><Text style={styles.plLabel}>Value at Cost</Text><Text style={[styles.plVal, { color: '#3b82f6' }]}>{fmt(stockAtCost)}</Text></View>
+                <View style={styles.plRow}><Text style={styles.plLabel}>Value at Selling Price</Text><Text style={[styles.plVal, { color: brand.primary }]}>{fmt(stockAtSell)}</Text></View>
+                <View style={styles.plRow}><Text style={styles.plLabel}>Potential Profit</Text><Text style={[styles.plVal, { color: '#22c55e' }]}>{fmt(stockAtSell - stockAtCost)}</Text></View>
+              </Card.Content>
+            </Card>
+            {lowStockItems.length > 0 && (
+              <Card style={styles.card}>
+                <Card.Title title="⚠ Low Stock Alerts" titleStyle={[styles.cardTitle, { color: '#f59e0b' }]} />
+                <Card.Content>
+                  {lowStockItems.map((p) => (
+                    <View key={p.id} style={styles.stockAlertRow}>
+                      <Text style={styles.plLabel} numberOfLines={1}>{p.name}</Text>
+                      <Text style={{ color: '#f59e0b', fontWeight: '700', fontSize: 13 }}>{p.stock_qty} left</Text>
+                    </View>
+                  ))}
+                </Card.Content>
+              </Card>
+            )}
+          </>
+        )}
+
+        {/* ---- Customer Debt ---- */}
+        {reportTab === 'customers' && (
+          <>
+            <Card style={styles.card}>
+              <Card.Title title="Customer Debt" titleStyle={styles.cardTitle} />
+              <Card.Content>
+                <View style={styles.bigStat}>
+                  <Text style={[styles.bigVal, { color: '#e53935' }]}>{fmt(totalDebt)}</Text>
+                  <Text style={styles.bigLabel}>Total Outstanding Debt</Text>
+                </View>
+                <Divider style={{ marginVertical: 12 }} />
+                {debtCustomers.length === 0 ? (
+                  <Text style={{ color: '#aaa', textAlign: 'center', padding: 10 }}>No customers with outstanding debt</Text>
+                ) : (
+                  debtCustomers.map((c) => (
+                    <View key={c.id} style={styles.plRow}>
+                      <View>
+                        <Text style={styles.plLabel}>{c.name}</Text>
+                        {c.phone && <Text style={{ fontSize: 11, color: '#aaa' }}>{c.phone}</Text>}
+                      </View>
+                      <Text style={[styles.plVal, { color: '#e53935' }]}>{fmt(Math.abs(c.credit_balance))}</Text>
+                    </View>
+                  ))
+                )}
+              </Card.Content>
+            </Card>
+          </>
+        )}
+
+        {/* ---- VAT Report ---- */}
+        {reportTab === 'vat' && (
+          <>
+            <Card style={styles.card}>
+              <Card.Title title="VAT Summary" titleStyle={styles.cardTitle} />
+              <Card.Content>
+                <View style={styles.bigStat}>
+                  <Text style={styles.bigVal}>{fmt(totalVAT)}</Text>
+                  <Text style={styles.bigLabel}>Total VAT Collected</Text>
+                </View>
+                <Divider style={{ marginVertical: 12 }} />
+                <View style={styles.plRow}><Text style={styles.plLabel}>Taxable Sales (excl. VAT)</Text><Text style={styles.plVal}>{fmt(totalRevenue - totalVAT)}</Text></View>
+                <View style={styles.plRow}><Text style={styles.plLabel}>VAT at 16%</Text><Text style={[styles.plVal, { color: '#f59e0b' }]}>{fmt(totalVAT)}</Text></View>
+                <View style={styles.plRow}><Text style={styles.plLabel}>Gross Revenue</Text><Text style={[styles.plVal, { color: brand.primary }]}>{fmt(totalRevenue)}</Text></View>
+                <Divider style={{ marginVertical: 12 }} />
+                <Text style={{ fontSize: 11, color: '#aaa', lineHeight: 16 }}>
+                  This VAT summary is for your KRA iTax filing. Submit through your KRA portal or eTIMS system.
+                </Text>
+              </Card.Content>
+            </Card>
+          </>
+        )}
 
         <View style={{ height: 24 }} />
       </ScrollView>
@@ -257,4 +436,12 @@ const styles = StyleSheet.create({
   trendRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   trendDate: { width: 44, fontSize: 12, color: '#666' },
   trendVal: { width: 90, fontSize: 11, color: '#444', textAlign: 'right' },
+  reportTabsScroll: { maxHeight: 44 },
+  reportTabsContent: { paddingHorizontal: 12, gap: 8, paddingVertical: 6 },
+  reportTab: { backgroundColor: '#f0f0f0' },
+  reportTabActive: { backgroundColor: brand.primary },
+  plRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  plLabel: { fontSize: 13, color: '#555', flex: 1 },
+  plVal: { fontSize: 13, fontWeight: '700', color: '#333' },
+  stockAlertRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
 });
