@@ -1,0 +1,163 @@
+import { getDb } from './database';
+import dayjs from 'dayjs';
+
+export interface CartItem {
+  product_id: number;
+  product_name: string;
+  qty: number;
+  unit_price: number;
+  discount: number;
+  vat_rate: number;
+  vat_amount: number;
+  total: number;
+}
+
+export interface Sale {
+  id: number;
+  invoice_no: string;
+  customer_id: number | null;
+  customer_name?: string;
+  cashier_id: number | null;
+  cashier_name?: string;
+  subtotal: number;
+  tax_amount: number;
+  discount: number;
+  total: number;
+  payment_method: string;
+  mpesa_ref: string | null;
+  status: string;
+  note: string | null;
+  created_at: string;
+  items?: CartItem[];
+}
+
+let _invoiceCounter = 0;
+
+const nextInvoiceNo = async (): Promise<string> => {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ c: number }>('SELECT COUNT(*) as c FROM sales');
+  _invoiceCounter = (row?.c ?? 0) + 1;
+  return `INV-${dayjs().format('YYYYMMDD')}-${String(_invoiceCounter).padStart(4, '0')}`;
+};
+
+export const salesQueries = {
+  create: async (
+    items: CartItem[],
+    opts: {
+      customerId?: number;
+      cashierId?: number;
+      discount?: number;
+      paymentMethod: string;
+      mpesaRef?: string;
+      note?: string;
+    },
+  ): Promise<number> => {
+    const db = await getDb();
+    const subtotal = items.reduce((s, i) => s + i.unit_price * i.qty - i.discount, 0);
+    const taxAmount = items.reduce((s, i) => s + i.vat_amount, 0);
+    const discount = opts.discount ?? 0;
+    const total = subtotal + taxAmount - discount;
+    const invoiceNo = await nextInvoiceNo();
+
+    const result = await db.runAsync(
+      `INSERT INTO sales (invoice_no, customer_id, cashier_id, subtotal, tax_amount, discount, total, payment_method, mpesa_ref, note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [invoiceNo, opts.customerId ?? null, opts.cashierId ?? null,
+       subtotal, taxAmount, discount, total,
+       opts.paymentMethod, opts.mpesaRef ?? null, opts.note ?? null],
+    );
+
+    const saleId = result.lastInsertRowId;
+
+    for (const item of items) {
+      await db.runAsync(
+        `INSERT INTO sale_items (sale_id, product_id, product_name, qty, unit_price, discount, vat_rate, vat_amount, total)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [saleId, item.product_id, item.product_name, item.qty,
+         item.unit_price, item.discount, item.vat_rate, item.vat_amount, item.total],
+      );
+      // Deduct stock if tracked
+      await db.runAsync(
+        'UPDATE products SET stock_qty = stock_qty - ? WHERE id = ? AND track_stock = 1',
+        [item.qty, item.product_id],
+      );
+    }
+
+    return saleId;
+  },
+
+  getAll: async (from?: string, to?: string, limit = 100): Promise<Sale[]> => {
+    const db = await getDb();
+    let where = '';
+    const params: any[] = [];
+    if (from && to) {
+      where = 'WHERE s.created_at BETWEEN ? AND ?';
+      params.push(from, to + 'T23:59:59');
+    }
+    return db.getAllAsync<Sale>(`
+      SELECT s.*, c.name as customer_name, u.name as cashier_name
+      FROM sales s
+      LEFT JOIN customers c ON s.customer_id = c.id
+      LEFT JOIN users u ON s.cashier_id = u.id
+      ${where}
+      ORDER BY s.created_at DESC LIMIT ?
+    `, [...params, limit]);
+  },
+
+  getById: async (id: number): Promise<Sale | null> => {
+    const db = await getDb();
+    const sale = await db.getFirstAsync<Sale>(`
+      SELECT s.*, c.name as customer_name, u.name as cashier_name
+      FROM sales s
+      LEFT JOIN customers c ON s.customer_id = c.id
+      LEFT JOIN users u ON s.cashier_id = u.id
+      WHERE s.id = ?
+    `, [id]);
+    if (!sale) return null;
+    sale.items = await db.getAllAsync<CartItem>(
+      'SELECT * FROM sale_items WHERE sale_id = ?', [id],
+    );
+    return sale;
+  },
+
+  getDailySummary: async (date: string) => {
+    const db = await getDb();
+    return db.getFirstAsync<{
+      total_sales: number; total_revenue: number;
+      cash_total: number; mpesa_total: number; credit_total: number;
+    }>(`
+      SELECT
+        COUNT(*) as total_sales,
+        COALESCE(SUM(total), 0) as total_revenue,
+        COALESCE(SUM(CASE WHEN payment_method='CASH' THEN total ELSE 0 END), 0) as cash_total,
+        COALESCE(SUM(CASE WHEN payment_method='MPESA' THEN total ELSE 0 END), 0) as mpesa_total,
+        COALESCE(SUM(CASE WHEN payment_method='CREDIT' THEN total ELSE 0 END), 0) as credit_total
+      FROM sales WHERE date(created_at) = ? AND status = 'PAID'
+    `, [date]);
+  },
+
+  getTopProducts: async (from: string, to: string, limit = 5) => {
+    const db = await getDb();
+    return db.getAllAsync<{ product_name: string; total_qty: number; total_revenue: number }>(`
+      SELECT si.product_name, SUM(si.qty) as total_qty, SUM(si.total) as total_revenue
+      FROM sale_items si
+      JOIN sales s ON si.sale_id = s.id
+      WHERE date(s.created_at) BETWEEN ? AND ? AND s.status = 'PAID'
+      GROUP BY si.product_id, si.product_name
+      ORDER BY total_revenue DESC LIMIT ?
+    `, [from, to, limit]);
+  },
+
+  getRevenueTrend: async (days = 7) => {
+    const db = await getDb();
+    return db.getAllAsync<{ date: string; revenue: number; sales_count: number }>(`
+      SELECT date(created_at) as date,
+             SUM(total) as revenue,
+             COUNT(*) as sales_count
+      FROM sales
+      WHERE created_at >= datetime('now', '-${days} days') AND status = 'PAID'
+      GROUP BY date(created_at)
+      ORDER BY date ASC
+    `);
+  },
+};
