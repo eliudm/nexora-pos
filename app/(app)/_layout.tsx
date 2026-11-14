@@ -83,6 +83,7 @@ export default function AppLayout() {
       <Tabs.Screen name="stocktake" options={{ href: null }} />
       <Tabs.Screen name="quotations" options={{ href: null }} />
       <Tabs.Screen name="layaway" options={{ href: null }} />
+      <Tabs.Screen name="help" options={{ href: null }} />
     </Tabs>
   );
 }

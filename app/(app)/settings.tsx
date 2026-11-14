@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, Linking } from 'react-native';
 import { Text, Appbar, Card, TextInput, Button, Divider, List, Portal, Dialog, DataTable } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -471,6 +471,17 @@ export default function SettingsScreen() {
             <List.Item title="Backup Database" description="Export database file to share or save" left={(p) => <List.Icon {...p} icon="database-export" color={brand.primary} />} onPress={handleBackup} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
             <Divider />
             <List.Item title="Restore Database" description="Import a previously exported backup" left={(p) => <List.Icon {...p} icon="database-import" color="#f59e0b" />} onPress={handleRestore} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
+          </Card>
+
+          <Divider style={{ marginVertical: 24 }} />
+
+          <Text style={styles.section}>Help & Support</Text>
+          <Card style={styles.card}>
+            <List.Item title="Help Centre" description="FAQs, guides, and troubleshooting" left={(p) => <List.Icon {...p} icon="help-circle" color={brand.primary} />} onPress={() => router.push('/(app)/help')} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
+            <Divider />
+            <List.Item title="WhatsApp Support" description="Chat with our support team" left={(p) => <List.Icon {...p} icon="whatsapp" color="#25D366" />} onPress={() => Linking.openURL('https://wa.me/254700000000?text=Hi%2C%20I%20need%20help%20with%20Nexora%20POS')} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
+            <Divider />
+            <List.Item title="Email Support" description="support@nexorapos.com" left={(p) => <List.Icon {...p} icon="email" color={brand.primary} />} onPress={() => Linking.openURL('mailto:support@nexorapos.com')} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
           </Card>
 
           <Divider style={{ marginVertical: 24 }} />
