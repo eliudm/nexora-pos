@@ -6,11 +6,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { getDb } from '../../src/db/database';
 import { getSetting } from '../../src/db/settings';
+import { useSession } from '../../src/context/session';
 import { brand } from '../../src/theme';
 
 const PIN_LENGTH = 4;
 
 export default function PinLoginScreen() {
+  const { setUser } = useSession();
   const [businessName, setBusinessName] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
@@ -42,6 +44,7 @@ export default function PinLoginScreen() {
         [entered],
       );
       if (user) {
+        setUser({ id: user.id, name: user.name, role: user.role as 'ADMIN' | 'CASHIER' });
         router.replace('/(app)');
       } else {
         Vibration.vibrate(400);

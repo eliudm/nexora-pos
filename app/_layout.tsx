@@ -12,6 +12,7 @@ import { paperTheme } from '../src/theme';
 import { AppSplashScreen } from '../src/components/SplashScreen';
 import { getDb } from '../src/db/database';
 import { getSetting } from '../src/db/settings';
+import { SessionProvider } from '../src/context/session';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -74,6 +75,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
+        <SessionProvider>
         <QueryClientProvider client={queryClient}>
           <PaperProvider
             theme={paperTheme}
@@ -88,6 +90,7 @@ export default function RootLayout() {
             </Stack>
           </PaperProvider>
         </QueryClientProvider>
+        </SessionProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
