@@ -111,7 +111,7 @@ export default function SettingsScreen() {
 
   const openShiftMutation = useMutation({
     mutationFn: () => shiftQueries.open(user!.id, user!.name, parseFloat(openingCash) || 0),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['open-shift'] }); setShiftDialogOpen(false); setOpeningCash(''); Alert.alert('Shift Opened', 'Your shift has started.'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['open-shift'] }); refetchShift(); setShiftDialogOpen(false); setOpeningCash(''); Alert.alert('Shift Opened', 'Your shift has started.'); },
   });
 
   const closeShiftMutation = useMutation({
@@ -124,7 +124,7 @@ export default function SettingsScreen() {
       );
       await shiftQueries.close(openShift.id, parseFloat(closingCash) || 0, summary?.c ?? 0, summary?.r ?? 0);
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['open-shift'] }); setShiftDialogOpen(false); setClosingCash(''); Alert.alert('Shift Closed', 'Your shift has ended.'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['open-shift'] }); refetchShift(); setShiftDialogOpen(false); setClosingCash(''); Alert.alert('Shift Closed', 'Your shift has ended.'); },
   });
 
   const handleSaveBusiness = async () => {
