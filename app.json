@@ -23,6 +23,11 @@
       "expo-font",
       "expo-status-bar",
       "expo-dev-client",
+      "expo-image-picker",
+      [
+        "expo-camera",
+        { "cameraPermission": "Allow Nexora POS to access camera for barcode scanning and product photos." }
+      ],
       [
         "react-native-purchases",
         { "androidApiKey": "REVENUECAT_ANDROID_API_KEY" }
