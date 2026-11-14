@@ -95,6 +95,31 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       submitted_at TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS shifts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cashier_id INTEGER REFERENCES users(id),
+      cashier_name TEXT,
+      opening_cash REAL DEFAULT 0,
+      closing_cash REAL,
+      total_sales INTEGER DEFAULT 0,
+      total_revenue REAL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'OPEN',
+      opened_at TEXT DEFAULT (datetime('now')),
+      closed_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS stock_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+      product_name TEXT NOT NULL,
+      change_qty REAL NOT NULL,
+      balance_after REAL NOT NULL,
+      reason TEXT NOT NULL,
+      user_id INTEGER REFERENCES users(id),
+      user_name TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 
   // Seed default admin if none exists
