@@ -275,6 +275,32 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       barcode TEXT,
       is_active INTEGER DEFAULT 1
     );
+
+    CREATE TABLE IF NOT EXISTS layaways (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      layaway_no TEXT UNIQUE NOT NULL,
+      customer_id INTEGER,
+      customer_name TEXT,
+      description TEXT,
+      total_amount REAL NOT NULL,
+      deposit_paid REAL DEFAULT 0,
+      balance_due REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'OPEN',
+      cashier_id INTEGER,
+      cashier_name TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS layaway_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      layaway_id INTEGER NOT NULL REFERENCES layaways(id),
+      amount REAL NOT NULL,
+      payment_method TEXT NOT NULL DEFAULT 'CASH',
+      mpesa_ref TEXT,
+      cashier_id INTEGER,
+      cashier_name TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime'))
+    );
   `);
 
   // Safe ALTER TABLE for columns that may not exist on older DB instances

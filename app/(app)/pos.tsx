@@ -7,6 +7,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import dayjs from 'dayjs';
 import { productQueries, Product } from '../../src/db/products';
 import { salesQueries, CartItem, SplitPayment } from '../../src/db/sales';
@@ -18,6 +19,10 @@ import { useSession } from '../../src/context/session';
 import { etimsService } from '../../src/services/etims';
 import { printerService } from '../../src/services/printer';
 import { buildReceiptText, buildReceiptHtml, ReceiptSale } from '../../src/services/receipt';
+import { darajaService } from '../../src/services/mpesa_daraja';
+import { whatsappService } from '../../src/services/whatsapp';
+import { smsService } from '../../src/services/sms';
+import { getSetting } from '../../src/db/settings';
 import { brand } from '../../src/theme';
 
 const PAYMENT_METHODS = ['CASH', 'MPESA', 'SPLIT', 'CREDIT'] as const;
@@ -68,6 +73,11 @@ export default function POSScreen() {
   // M-Pesa
   const [stkPhone, setStkPhone] = useState('');
   const [stkLoading, setStkLoading] = useState(false);
+
+  // Post-sale share
+  const [lastSale, setLastSale] = useState<any>(null);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+
   const lastScanRef = useRef<string>('');
 
   const { data: products, isLoading } = useQuery({
@@ -105,6 +115,7 @@ export default function POSScreen() {
       qc.invalidateQueries({ queryKey: ['sales'] });
       qc.invalidateQueries({ queryKey: ['products'] });
       const sale = await salesQueries.getById(saleId);
+      const customerForShare = selectedCustomer;
       setCart([]);
       setCheckoutVisible(false);
       setMpesaRef('');
@@ -119,6 +130,11 @@ export default function POSScreen() {
       if (sale) {
         etimsService.submitSale(sale as any).catch(() => {});
         await printReceipt(sale);
+        // Show share dialog if customer has a phone
+        if (customerForShare?.phone) {
+          setLastSale({ ...sale, customerPhone: customerForShare.phone });
+          setShareDialogOpen(true);
+        }
       }
     },
   });
@@ -309,18 +325,68 @@ export default function POSScreen() {
   // ---- M-Pesa STK Push ----
   const handleStkPush = async () => {
     if (!stkPhone.trim()) { Alert.alert('Phone Required', 'Enter the customer phone number.'); return; }
-    if (!bizInfo?.mpesaPaybill && !bizInfo?.mpesaTill) {
-      Alert.alert('M-Pesa Not Configured', 'Set up your M-Pesa Paybill or Till in Settings first.');
-      return;
-    }
     setStkLoading(true);
-    Alert.alert(
-      'M-Pesa Payment',
-      `Ask customer to send KES ${total.toFixed(0)} to:\n\n` +
-      (bizInfo.mpesaTill ? `Till: ${bizInfo.mpesaTill}` : `Paybill: ${bizInfo.mpesaPaybill}`) +
-      `\n\nThen enter the confirmation code below.`,
-    );
-    setStkLoading(false);
+    try {
+      const isDarajaConfigured = await darajaService.isConfigured();
+      if (isDarajaConfigured) {
+        const result = await darajaService.stkPush(
+          stkPhone,
+          total,
+          bizInfo?.mpesaTill || bizInfo?.mpesaPaybill || 'Pay',
+          'POS Sale',
+        );
+        if (result.success) {
+          Alert.alert('STK Push Sent', 'A payment prompt has been sent to the customer\'s phone. Enter the M-Pesa code once they confirm.');
+        } else {
+          Alert.alert('STK Push Failed', result.error ?? 'Could not send payment prompt. Ask customer to pay manually.');
+        }
+      } else {
+        // Fallback: show manual payment instructions
+        Alert.alert(
+          'M-Pesa Payment',
+          `Ask customer to send KES ${total.toFixed(0)} to:\n\n` +
+          (bizInfo?.mpesaTill ? `Till: ${bizInfo.mpesaTill}` : `Paybill: ${bizInfo?.mpesaPaybill ?? 'Not configured'}`) +
+          `\n\nThen enter the M-Pesa confirmation code below.\n\n(To enable automatic prompts, configure Daraja API in Settings.)`,
+        );
+      }
+    } finally {
+      setStkLoading(false);
+    }
+  };
+
+  // ---- Post-sale sharing ----
+  const shareViaWhatsApp = async () => {
+    if (!lastSale || !bizInfo) return;
+    const receiptSale: ReceiptSale = {
+      invoice_no: lastSale.invoice_no, created_at: lastSale.created_at,
+      customer_name: lastSale.customer_name, cashier_name: lastSale.cashier_name,
+      subtotal: lastSale.subtotal, tax_amount: lastSale.tax_amount,
+      discount: lastSale.discount, total: lastSale.total,
+      payment_method: lastSale.payment_method, mpesa_ref: lastSale.mpesa_ref,
+      split_cash: lastSale.split_cash, split_mpesa: lastSale.split_mpesa,
+      items: lastSale.items ?? [],
+    };
+    setShareDialogOpen(false);
+    await whatsappService.sendReceipt(receiptSale, bizInfo.name ?? 'Store', lastSale.customerPhone);
+  };
+
+  const shareViaSMS = async () => {
+    if (!lastSale || !bizInfo) return;
+    const receiptSale: ReceiptSale = {
+      invoice_no: lastSale.invoice_no, created_at: lastSale.created_at,
+      customer_name: lastSale.customer_name, cashier_name: lastSale.cashier_name,
+      subtotal: lastSale.subtotal, tax_amount: lastSale.tax_amount,
+      discount: lastSale.discount, total: lastSale.total,
+      payment_method: lastSale.payment_method, mpesa_ref: lastSale.mpesa_ref,
+      items: lastSale.items ?? [],
+    };
+    setShareDialogOpen(false);
+    const result = await smsService.sendReceipt(receiptSale, bizInfo.name ?? 'Store', lastSale.customerPhone);
+    if (result.success) {
+      Alert.alert('SMS Sent', 'Receipt sent via SMS.');
+    } else {
+      Alert.alert('SMS Failed', result.error ?? 'Could not send SMS. Check Africa\'s Talking config in Settings.');
+    }
   };
 
   // ---- Confirm sale ----
@@ -524,6 +590,16 @@ export default function POSScreen() {
               icon="pause"
             >
               Hold
+            </Button>
+            <Button
+              mode="outlined"
+              compact
+              onPress={() => router.push('/(app)/layaway')}
+              style={[styles.holdBtn, { borderColor: '#f59e0b' }]}
+              icon="package-down"
+              textColor="#f59e0b"
+            >
+              Layaway
             </Button>
             <Button
               mode="contained"
@@ -767,6 +843,24 @@ export default function POSScreen() {
             <Button mode="contained" onPress={handleConfirmSale} loading={mutation.isPending} disabled={mutation.isPending}>
               Confirm Sale
             </Button>
+          </Dialog.Actions>
+        </Dialog>
+        {/* Post-sale Share Receipt Dialog */}
+        <Dialog visible={shareDialogOpen} onDismiss={() => setShareDialogOpen(false)}>
+          <Dialog.Title>Share Receipt</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ color: '#555', marginBottom: 16 }}>
+              Send receipt to {lastSale?.customer_name ?? 'customer'} at {lastSale?.customerPhone}?
+            </Text>
+            <Button mode="contained" icon="whatsapp" style={{ marginBottom: 10, backgroundColor: '#25D366' }} onPress={shareViaWhatsApp}>
+              Send via WhatsApp
+            </Button>
+            <Button mode="outlined" icon="message-text" onPress={shareViaSMS}>
+              Send via SMS
+            </Button>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShareDialogOpen(false)}>Skip</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>

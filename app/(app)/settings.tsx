@@ -193,7 +193,7 @@ export default function SettingsScreen() {
       const db = await getDb();
       const summary = await db.getFirstAsync<{ c: number; r: number }>(
         "SELECT COUNT(*) as c, COALESCE(SUM(total),0) as r FROM sales WHERE cashier_id=? AND date(created_at)=date('now') AND status='PAID'",
-        [user?.id],
+        [user?.id ?? 0],
       );
       await shiftQueries.close(openShift.id, parseFloat(closingCash) || 0, summary?.c ?? 0, summary?.r ?? 0);
     },

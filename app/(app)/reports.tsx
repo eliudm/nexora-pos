@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, Alert, TextInput as RNTextInput } from 'react-native';
 import { Text, Appbar, Card, Chip, Divider, Menu, Button } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -10,16 +10,19 @@ import dayjs from 'dayjs';
 import { salesQueries } from '../../src/db/sales';
 import { productQueries } from '../../src/db/products';
 import { customerQueries } from '../../src/db/customers';
+import { cashDrawerQueries } from '../../src/db/cash_drawer';
+import { shiftQueries } from '../../src/db/shifts';
 import { getBusinessInfo } from '../../src/db/settings';
 import { brand } from '../../src/theme';
 
 type Period = 'today' | 'week' | 'month';
-type ReportTab = 'sales' | 'profit' | 'stock' | 'customers' | 'vat';
+type ReportTab = 'sales' | 'profit' | 'stock' | 'customers' | 'vat' | 'reconcile';
 
 export default function ReportsScreen() {
   const [period, setPeriod] = useState<Period>('today');
   const [reportTab, setReportTab] = useState<ReportTab>('sales');
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [actualCash, setActualCash] = useState('');
 
   const ranges: Record<Period, { from: string; to: string }> = {
     today: { from: dayjs().format('YYYY-MM-DD'), to: dayjs().format('YYYY-MM-DD') },
@@ -63,6 +66,27 @@ export default function ReportsScreen() {
     queryFn: () => customerQueries.getAll(),
     enabled: reportTab === 'customers',
   });
+
+  const { data: drawerBalance } = useQuery({
+    queryKey: ['drawer-balance-report'],
+    queryFn: cashDrawerQueries.getCurrentBalance,
+    enabled: reportTab === 'reconcile',
+  });
+
+  const { data: openShift } = useQuery({
+    queryKey: ['open-shift-report'],
+    queryFn: shiftQueries.getOpen,
+    enabled: reportTab === 'reconcile',
+  });
+
+  // Today's reconciliation data
+  const todaySales = (sales ?? []);
+  const expectedCash = todaySales.filter(s => s.payment_method === 'CASH').reduce((a, s) => a + s.total, 0)
+    + todaySales.filter(s => s.payment_method === 'SPLIT').reduce((a, s) => a + ((s as any).split_cash ?? 0), 0);
+  const expectedMpesa = todaySales.filter(s => s.payment_method === 'MPESA').reduce((a, s) => a + s.total, 0)
+    + todaySales.filter(s => s.payment_method === 'SPLIT').reduce((a, s) => a + ((s as any).split_mpesa ?? 0), 0);
+  const expectedCredit = todaySales.filter(s => s.payment_method === 'CREDIT').reduce((a, s) => a + s.total, 0);
+  const cashVariance = (parseFloat(actualCash) || 0) - ((openShift?.opening_cash ?? 0) + expectedCash);
 
   // Profit/loss data: revenue minus COGS estimate (cost × qty from sale_items × product cost ratio)
   const totalCOGS = (() => {
@@ -162,6 +186,7 @@ export default function ReportsScreen() {
           { key: 'stock', label: 'Stock Value' },
           { key: 'customers', label: 'Customer Debt' },
           { key: 'vat', label: 'VAT Report' },
+          { key: 'reconcile', label: 'Reconcile' },
         ] as { key: ReportTab; label: string }[]).map((t) => (
           <Chip
             key={t.key}
@@ -177,7 +202,7 @@ export default function ReportsScreen() {
       </ScrollView>
 
       {/* Period Filter (only for time-sensitive reports) */}
-      {(['sales', 'profit', 'vat'] as ReportTab[]).includes(reportTab) && (
+      {(['sales', 'profit', 'vat', 'reconcile'] as ReportTab[]).includes(reportTab) && (
         <View style={styles.tabs}>
           {(['today', 'week', 'month'] as Period[]).map((p) => (
             <Chip
@@ -390,6 +415,50 @@ export default function ReportsScreen() {
                 <Divider style={{ marginVertical: 12 }} />
                 <Text style={{ fontSize: 11, color: '#aaa', lineHeight: 16 }}>
                   This VAT summary is for your KRA iTax filing. Submit through your KRA portal or eTIMS system.
+                </Text>
+              </Card.Content>
+            </Card>
+          </>
+        )}
+
+        {/* ---- Daily Reconciliation ---- */}
+        {reportTab === 'reconcile' && (
+          <>
+            <Card style={styles.card}>
+              <Card.Title title="Daily Reconciliation" titleStyle={styles.cardTitle} subtitle={dayjs().format('D MMMM YYYY')} />
+              <Card.Content>
+                {openShift ? (
+                  <Text style={{ fontSize: 12, color: '#22c55e', marginBottom: 8 }}>
+                    Shift open — {openShift.cashier_name} since {dayjs(openShift.opened_at).format('HH:mm')} · Opening cash: {fmt(openShift.opening_cash)}
+                  </Text>
+                ) : (
+                  <Text style={{ fontSize: 12, color: '#aaa', marginBottom: 8 }}>No open shift</Text>
+                )}
+                <Divider style={{ marginBottom: 12 }} />
+                <View style={styles.plRow}><Text style={styles.plLabel}>Expected Cash Sales</Text><Text style={styles.plVal}>{fmt(expectedCash)}</Text></View>
+                <View style={styles.plRow}><Text style={styles.plLabel}>Expected M-Pesa</Text><Text style={styles.plVal}>{fmt(expectedMpesa)}</Text></View>
+                <View style={styles.plRow}><Text style={styles.plLabel}>Credit Sales</Text><Text style={[styles.plVal, { color: '#f59e0b' }]}>{fmt(expectedCredit)}</Text></View>
+                <View style={styles.plRow}><Text style={styles.plLabel}>Drawer Balance</Text><Text style={[styles.plVal, { color: brand.primary }]}>{fmt(drawerBalance ?? 0)}</Text></View>
+                <Divider style={{ marginVertical: 10 }} />
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6 }}>Actual Cash in Drawer</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Text style={{ fontSize: 13, color: '#555' }}>KES</Text>
+                  <RNTextInput
+                    value={actualCash}
+                    onChangeText={setActualCash}
+                    keyboardType="decimal-pad"
+                    placeholder="0"
+                    style={{ flex: 1, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 16, color: '#111' }}
+                  />
+                </View>
+                <View style={styles.plRow}>
+                  <Text style={styles.plLabel}>Over / Short</Text>
+                  <Text style={[styles.plVal, { color: cashVariance >= 0 ? '#22c55e' : '#e53935' }]}>
+                    {cashVariance >= 0 ? '+' : ''}{fmt(cashVariance)}
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 11, color: '#aaa', marginTop: 8 }}>
+                  Enter actual drawer cash to see variance. Opening cash: {fmt(openShift?.opening_cash ?? 0)} + expected cash sales: {fmt(expectedCash)}.
                 </Text>
               </Card.Content>
             </Card>

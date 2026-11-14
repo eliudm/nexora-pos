@@ -8,10 +8,11 @@ import * as ImagePicker from 'expo-image-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { productQueries, Product, Category } from '../../src/db/products';
 import { wastageQueries, WASTAGE_REASONS } from '../../src/db/wastage';
+import { variantQueries, ProductVariant } from '../../src/db/variants';
 import { useSession } from '../../src/context/session';
 import { brand } from '../../src/theme';
 
-type DialogMode = 'product' | 'category' | 'barcode' | 'wastage' | null;
+type DialogMode = 'product' | 'category' | 'barcode' | 'wastage' | 'variants' | null;
 
 const EMPTY_PRODUCT = {
   name: '', price: '', cost: '', barcode: '', stock_qty: '0',
@@ -36,6 +37,13 @@ export default function ProductsScreen() {
   const [wastageProduct, setWastageProduct] = useState<Product | null>(null);
   const [wastageQty, setWastageQty] = useState('');
   const [wastageReason, setWastageReason] = useState(WASTAGE_REASONS[0]);
+
+  // Variants
+  const [variantProduct, setVariantProduct] = useState<Product | null>(null);
+  const [variants, setVariants] = useState<ProductVariant[]>([]);
+  const [variantForm, setVariantForm] = useState({ name: '', sku: '', price_adj: '', stock: '' });
+  const [editingVariant, setEditingVariant] = useState<ProductVariant | null>(null);
+  const [variantFormOpen, setVariantFormOpen] = useState(false);
 
   const { data: products } = useQuery({ queryKey: ['products', search], queryFn: () => productQueries.getAll(search) });
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: productQueries.getCategories });
@@ -88,6 +96,50 @@ export default function ProductsScreen() {
     mutationFn: () => productQueries.createCategory(catName.trim(), catColor),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['categories'] }); closeDialog(); },
   });
+
+  const saveVariantMutation = useMutation({
+    mutationFn: async () => {
+      if (!variantProduct) return;
+      const data = {
+        product_id: variantProduct.id,
+        variant_name: variantForm.name.trim(),
+        sku: variantForm.sku.trim() || null,
+        price_adjustment: parseFloat(variantForm.price_adj) || 0,
+        stock_qty: parseFloat(variantForm.stock) || 0,
+        barcode: null,
+        is_active: 1,
+      };
+      if (editingVariant) await variantQueries.update(editingVariant.id, data);
+      else await variantQueries.create(data);
+    },
+    onSuccess: async () => {
+      if (variantProduct) {
+        const updated = await variantQueries.getByProduct(variantProduct.id);
+        setVariants(updated);
+      }
+      setVariantFormOpen(false);
+      setEditingVariant(null);
+      setVariantForm({ name: '', sku: '', price_adj: '', stock: '' });
+    },
+    onError: (e: any) => Alert.alert('Error', e.message),
+  });
+
+  const deleteVariantMutation = useMutation({
+    mutationFn: (id: number) => variantQueries.delete(id),
+    onSuccess: async () => {
+      if (variantProduct) {
+        const updated = await variantQueries.getByProduct(variantProduct.id);
+        setVariants(updated);
+      }
+    },
+  });
+
+  const openVariants = async (p: Product) => {
+    setVariantProduct(p);
+    const list = await variantQueries.getByProduct(p.id);
+    setVariants(list);
+    setDialog('variants');
+  };
 
   const closeDialog = () => { setDialog(null); setEditing(null); setForm({ ...EMPTY_PRODUCT }); setCatName(''); setCatColor(brand.primary); };
 
@@ -180,6 +232,7 @@ export default function ProductsScreen() {
               >
                 <Menu.Item onPress={() => { setMenuId(null); openEdit(item); }} title="Edit" />
                 <Menu.Item onPress={() => { setMenuId(null); setWastageProduct(item); setWastageQty(''); setWastageReason(WASTAGE_REASONS[0]); setDialog('wastage'); }} title="Record Wastage" leadingIcon="trash-can" />
+                <Menu.Item onPress={() => { setMenuId(null); openVariants(item); }} title="Manage Variants" leadingIcon="tag-multiple" />
                 <Divider />
                 <Menu.Item onPress={() => { setMenuId(null); handleDelete(item.id); }} title="Delete" titleStyle={{ color: '#e53935' }} />
               </Menu>
@@ -298,6 +351,51 @@ export default function ProductsScreen() {
           <Dialog.Actions>
             <Button onPress={() => setDialog(null)}>Cancel</Button>
             <Button mode="contained" onPress={() => wastageMutation.mutate()} loading={wastageMutation.isPending}>Record</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Variants Dialog */}
+        <Dialog visible={dialog === 'variants'} onDismiss={() => { setDialog(null); setVariantProduct(null); }}>
+          <Dialog.ScrollArea style={{ maxHeight: 500 }}>
+            <Dialog.Title>{variantProduct?.name} — Variants</Dialog.Title>
+            <View style={{ padding: 16 }}>
+              {variants.length === 0 && <Text style={{ color: '#aaa', marginBottom: 12 }}>No variants yet. Add sizes, colours, etc.</Text>}
+              {variants.map((v) => (
+                <View key={v.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#111' }}>{v.variant_name}</Text>
+                    <Text style={{ fontSize: 12, color: '#888' }}>
+                      {v.sku ? `SKU: ${v.sku}  ` : ''}
+                      {v.price_adjustment !== 0 ? `${v.price_adjustment > 0 ? '+' : ''}KES${v.price_adjustment}  ` : ''}
+                      Stock: {v.stock_qty}
+                    </Text>
+                  </View>
+                  <Button compact icon="pencil" onPress={() => { setEditingVariant(v); setVariantForm({ name: v.variant_name, sku: v.sku ?? '', price_adj: String(v.price_adjustment), stock: String(v.stock_qty) }); setVariantFormOpen(true); }}>Edit</Button>
+                  <Button compact icon="delete" textColor="#e53935" onPress={() => Alert.alert('Delete Variant', 'Remove this variant?', [{ text: 'Cancel' }, { text: 'Delete', style: 'destructive', onPress: () => deleteVariantMutation.mutate(v.id) }])}>Del</Button>
+                </View>
+              ))}
+              <Button mode="outlined" icon="plus" style={{ marginTop: 12 }} onPress={() => { setEditingVariant(null); setVariantForm({ name: '', sku: '', price_adj: '', stock: '' }); setVariantFormOpen(true); }}>
+                Add Variant
+              </Button>
+            </View>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
+            <Button onPress={() => { setDialog(null); setVariantProduct(null); }}>Close</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Variant Form Dialog */}
+        <Dialog visible={variantFormOpen} onDismiss={() => setVariantFormOpen(false)}>
+          <Dialog.Title>{editingVariant ? 'Edit Variant' : 'Add Variant'}</Dialog.Title>
+          <Dialog.Content>
+            <TextInput label="Variant Name *" value={variantForm.name} onChangeText={(v) => setVariantForm(f => ({ ...f, name: v }))} mode="outlined" style={{ marginBottom: 10 }} placeholder="e.g. Small, Red, 1L" autoFocus />
+            <TextInput label="SKU (optional)" value={variantForm.sku} onChangeText={(v) => setVariantForm(f => ({ ...f, sku: v }))} mode="outlined" style={{ marginBottom: 10 }} />
+            <TextInput label="Price Adjustment (KES, can be negative)" value={variantForm.price_adj} onChangeText={(v) => setVariantForm(f => ({ ...f, price_adj: v }))} mode="outlined" keyboardType="decimal-pad" style={{ marginBottom: 10 }} />
+            <TextInput label="Stock Qty" value={variantForm.stock} onChangeText={(v) => setVariantForm(f => ({ ...f, stock: v }))} mode="outlined" keyboardType="decimal-pad" />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setVariantFormOpen(false)}>Cancel</Button>
+            <Button mode="contained" onPress={() => saveVariantMutation.mutate()} loading={saveVariantMutation.isPending}>Save</Button>
           </Dialog.Actions>
         </Dialog>
 
