@@ -242,4 +242,60 @@ export const salesQueries = {
       ORDER BY date ASC
     `);
   },
+
+  getHourlySales: async (days = 7) => {
+    const db = await getDb();
+    return db.getAllAsync<{ hour: number; revenue: number; sales_count: number }>(`
+      SELECT CAST(strftime('%H', created_at) AS INTEGER) as hour,
+             SUM(total) as revenue,
+             COUNT(*) as sales_count
+      FROM sales
+      WHERE created_at >= datetime('now', '-${days} days') AND status = 'PAID'
+      GROUP BY hour
+      ORDER BY hour ASC
+    `);
+  },
+
+  getPaymentMix: async (from: string, to: string) => {
+    const db = await getDb();
+    return db.getAllAsync<{ payment_method: string; total: number; count: number }>(`
+      SELECT payment_method,
+             SUM(total) as total,
+             COUNT(*) as count
+      FROM sales
+      WHERE date(created_at) BETWEEN ? AND ? AND status = 'PAID'
+      GROUP BY payment_method
+      ORDER BY total DESC
+    `, [from, to]);
+  },
+
+  getCategorySales: async (from: string, to: string) => {
+    const db = await getDb();
+    return db.getAllAsync<{ category_name: string; revenue: number; qty: number }>(`
+      SELECT COALESCE(c.name, 'Uncategorised') as category_name,
+             SUM(si.total) as revenue,
+             SUM(si.qty) as qty
+      FROM sale_items si
+      JOIN products p ON p.id = si.product_id
+      LEFT JOIN categories c ON c.id = p.category_id
+      JOIN sales s ON s.id = si.sale_id
+      WHERE date(s.created_at) BETWEEN ? AND ? AND s.status = 'PAID'
+      GROUP BY c.id
+      ORDER BY revenue DESC
+      LIMIT 8
+    `, [from, to]);
+  },
+
+  getCashierSales: async (from: string, to: string) => {
+    const db = await getDb();
+    return db.getAllAsync<{ cashier_name: string; revenue: number; count: number }>(`
+      SELECT cashier_name,
+             SUM(total) as revenue,
+             COUNT(*) as count
+      FROM sales
+      WHERE date(created_at) BETWEEN ? AND ? AND status = 'PAID'
+      GROUP BY cashier_id
+      ORDER BY revenue DESC
+    `, [from, to]);
+  },
 };
