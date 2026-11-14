@@ -1,14 +1,22 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, FlatList, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, StyleSheet, FlatList, Alert, KeyboardAvoidingView, Platform, ScrollView, Image, Pressable } from 'react-native';
 import { Text, Appbar, Searchbar, FAB, Portal, Dialog, TextInput, Button, Chip, Switch, Card, Menu, Divider } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { productQueries, Product, Category } from '../../src/db/products';
 import { brand } from '../../src/theme';
 
-type DialogMode = 'product' | 'category' | null;
+type DialogMode = 'product' | 'category' | 'barcode' | null;
 
-const EMPTY_PRODUCT = { name: '', price: '', cost: '', barcode: '', stock_qty: '0', track_stock: true, vat_rate: '16', category_id: null as number | null };
+const EMPTY_PRODUCT = {
+  name: '', price: '', cost: '', barcode: '', stock_qty: '0',
+  track_stock: true, vat_rate: '16', category_id: null as number | null, image_uri: null as string | null,
+};
+
+const PRESET_COLORS = ['#1db8a0', '#6f67ff', '#f59e0b', '#e53935', '#22c55e', '#3b82f6', '#ec4899', '#8b5cf6', '#f97316', '#64748b'];
 
 export default function ProductsScreen() {
   const qc = useQueryClient();
@@ -17,7 +25,10 @@ export default function ProductsScreen() {
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState({ ...EMPTY_PRODUCT });
   const [catName, setCatName] = useState('');
+  const [catColor, setCatColor] = useState(brand.primary);
   const [menuId, setMenuId] = useState<number | null>(null);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [lastScan, setLastScan] = useState('');
 
   const { data: products } = useQuery({ queryKey: ['products', search], queryFn: () => productQueries.getAll(search) });
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: productQueries.getCategories });
@@ -25,16 +36,10 @@ export default function ProductsScreen() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       const data = {
-        name: form.name.trim(),
-        price: parseFloat(form.price) || 0,
-        cost: parseFloat(form.cost) || 0,
-        barcode: form.barcode.trim() || null,
-        stock_qty: parseInt(form.stock_qty) || 0,
-        track_stock: form.track_stock ? 1 : 0,
-        vat_rate: parseFloat(form.vat_rate) || 0,
-        category_id: form.category_id,
-        image_uri: null,
-        is_active: 1,
+        name: form.name.trim(), price: parseFloat(form.price) || 0, cost: parseFloat(form.cost) || 0,
+        barcode: form.barcode.trim() || null, stock_qty: parseInt(form.stock_qty) || 0,
+        track_stock: form.track_stock ? 1 : 0, vat_rate: parseFloat(form.vat_rate) || 0,
+        category_id: form.category_id, image_uri: form.image_uri, is_active: 1,
       };
       if (editing) await productQueries.update(editing.id, data);
       else await productQueries.create(data);
@@ -48,28 +53,49 @@ export default function ProductsScreen() {
   });
 
   const catMutation = useMutation({
-    mutationFn: () => productQueries.createCategory(catName.trim(), brand.primary),
+    mutationFn: () => productQueries.createCategory(catName.trim(), catColor),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['categories'] }); closeDialog(); },
   });
 
-  const closeDialog = () => { setDialog(null); setEditing(null); setForm({ ...EMPTY_PRODUCT }); setCatName(''); };
+  const closeDialog = () => { setDialog(null); setEditing(null); setForm({ ...EMPTY_PRODUCT }); setCatName(''); setCatColor(brand.primary); };
 
   const openEdit = (p: Product) => {
     setEditing(p);
-    setForm({
-      name: p.name, price: String(p.price), cost: String(p.cost),
-      barcode: p.barcode ?? '', stock_qty: String(p.stock_qty),
-      track_stock: p.track_stock === 1, vat_rate: String(p.vat_rate),
-      category_id: p.category_id,
-    });
+    setForm({ name: p.name, price: String(p.price), cost: String(p.cost), barcode: p.barcode ?? '', stock_qty: String(p.stock_qty), track_stock: p.track_stock === 1, vat_rate: String(p.vat_rate), category_id: p.category_id, image_uri: p.image_uri });
     setDialog('product');
   };
 
-  const handleDelete = (id: number) => {
-    Alert.alert('Delete Product', 'Mark this product as inactive?', [
-      { text: 'Cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteMutation.mutate(id) },
-    ]);
+  const handleDelete = (id: number) => Alert.alert('Delete Product', 'Mark this product as inactive?', [
+    { text: 'Cancel' },
+    { text: 'Delete', style: 'destructive', onPress: () => deleteMutation.mutate(id) },
+  ]);
+
+  const openBarcodeScanner = async () => {
+    if (!cameraPermission?.granted) {
+      const result = await requestCameraPermission();
+      if (!result.granted) { Alert.alert('Permission needed', 'Camera permission required.'); return; }
+    }
+    setDialog('barcode');
+  };
+
+  const handleBarcodeScan = ({ data }: { data: string }) => {
+    if (data === lastScan) return;
+    setLastScan(data);
+    setForm((f) => ({ ...f, barcode: data }));
+    setDialog('product');
+    setTimeout(() => setLastScan(''), 2000);
+  };
+
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.5 });
+    if (!result.canceled) setForm((f) => ({ ...f, image_uri: result.assets[0].uri }));
+  };
+
+  const takePhoto = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) { Alert.alert('Permission needed', 'Camera permission required.'); return; }
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.5 });
+    if (!result.canceled) setForm((f) => ({ ...f, image_uri: result.assets[0].uri }));
   };
 
   return (
@@ -79,12 +105,7 @@ export default function ProductsScreen() {
         <Appbar.Action icon="tag-plus" color="#fff" onPress={() => setDialog('category')} />
       </Appbar.Header>
 
-      <Searchbar
-        placeholder="Search products..."
-        value={search}
-        onChangeText={setSearch}
-        style={styles.searchbar}
-      />
+      <Searchbar placeholder="Search products..." value={search} onChangeText={setSearch} style={styles.searchbar} />
 
       <FlatList
         data={products ?? []}
@@ -93,9 +114,17 @@ export default function ProductsScreen() {
         renderItem={({ item }) => (
           <Card style={styles.productCard}>
             <Card.Content style={styles.productContent}>
-              <View style={{ flex: 1 }}>
+              {item.image_uri ? (
+                <Image source={{ uri: item.image_uri }} style={styles.productImage} />
+              ) : (
+                <View style={styles.productImagePlaceholder}>
+                  <MaterialCommunityIcons name="package-variant" size={24} color="#ccc" />
+                </View>
+              )}
+              <View style={{ flex: 1, marginLeft: 10 }}>
                 <Text style={styles.productName}>{item.name}</Text>
                 <Text style={styles.productSub}>{item.category_name ?? 'Uncategorized'}</Text>
+                {item.barcode && <Text style={styles.barcode}>{item.barcode}</Text>}
                 {item.track_stock === 1 && (
                   <Chip compact style={[styles.stockChip, item.stock_qty < 5 && styles.lowChip]} textStyle={{ fontSize: 10 }}>
                     Stock: {item.stock_qty}
@@ -109,9 +138,7 @@ export default function ProductsScreen() {
               <Menu
                 visible={menuId === item.id}
                 onDismiss={() => setMenuId(null)}
-                anchor={
-                  <Appbar.Action icon="dots-vertical" size={20} onPress={() => setMenuId(item.id)} />
-                }
+                anchor={<Appbar.Action icon="dots-vertical" size={20} onPress={() => setMenuId(item.id)} />}
               >
                 <Menu.Item onPress={() => { setMenuId(null); openEdit(item); }} title="Edit" />
                 <Divider />
@@ -125,12 +152,45 @@ export default function ProductsScreen() {
       <FAB icon="plus" style={styles.fab} color="#fff" onPress={() => setDialog('product')} />
 
       <Portal>
+        {/* Barcode Scanner */}
+        <Dialog visible={dialog === 'barcode'} onDismiss={() => setDialog('product')}>
+          <Dialog.Title>Scan Barcode</Dialog.Title>
+          <Dialog.Content style={{ height: 280 }}>
+            {dialog === 'barcode' && (
+              <CameraView
+                style={{ flex: 1, borderRadius: 8, overflow: 'hidden' }}
+                facing="back"
+                barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'code128', 'code39', 'qr'] }}
+                onBarcodeScanned={handleBarcodeScan}
+              />
+            )}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setDialog('product')}>Cancel</Button>
+          </Dialog.Actions>
+        </Dialog>
+
         {/* Product Dialog */}
         <Dialog visible={dialog === 'product'} onDismiss={closeDialog}>
           <Dialog.Title>{editing ? 'Edit Product' : 'Add Product'}</Dialog.Title>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <ScrollView>
               <Dialog.Content>
+                {/* Product Image */}
+                <View style={styles.imageRow}>
+                  {form.image_uri ? (
+                    <Image source={{ uri: form.image_uri }} style={styles.imagePreview} />
+                  ) : (
+                    <View style={styles.imagePlaceholder}>
+                      <MaterialCommunityIcons name="image-outline" size={36} color="#ccc" />
+                    </View>
+                  )}
+                  <View style={styles.imageButtons}>
+                    <Button mode="outlined" onPress={pickImage} compact icon="image" style={{ marginBottom: 6 }}>Gallery</Button>
+                    <Button mode="outlined" onPress={takePhoto} compact icon="camera">Camera</Button>
+                  </View>
+                </View>
+
                 <TextInput label="Product Name *" value={form.name} onChangeText={(v) => setForm((f) => ({ ...f, name: v }))} mode="outlined" style={styles.input} />
                 <View style={styles.row}>
                   <TextInput label="Selling Price (KES) *" value={form.price} onChangeText={(v) => setForm((f) => ({ ...f, price: v }))} mode="outlined" keyboardType="numeric" style={[styles.input, { flex: 1, marginRight: 8 }]} />
@@ -138,7 +198,12 @@ export default function ProductsScreen() {
                 </View>
                 <View style={styles.row}>
                   <TextInput label="VAT Rate (%)" value={form.vat_rate} onChangeText={(v) => setForm((f) => ({ ...f, vat_rate: v }))} mode="outlined" keyboardType="numeric" style={[styles.input, { flex: 1, marginRight: 8 }]} />
-                  <TextInput label="Barcode" value={form.barcode} onChangeText={(v) => setForm((f) => ({ ...f, barcode: v }))} mode="outlined" style={[styles.input, { flex: 1 }]} />
+                  <View style={[styles.input, { flex: 1, flexDirection: 'row', alignItems: 'center' }]}>
+                    <TextInput label="Barcode" value={form.barcode} onChangeText={(v) => setForm((f) => ({ ...f, barcode: v }))} mode="outlined" style={{ flex: 1 }} />
+                    <Pressable onPress={openBarcodeScanner} style={styles.scanBtn}>
+                      <MaterialCommunityIcons name="barcode-scan" size={22} color={brand.primary} />
+                    </Pressable>
+                  </View>
                 </View>
                 <View style={styles.switchRow}>
                   <Text>Track Stock</Text>
@@ -151,24 +216,9 @@ export default function ProductsScreen() {
                   <View>
                     <Text style={styles.sectionLabel}>Category</Text>
                     <View style={styles.catRow}>
-                      <Chip
-                        selected={form.category_id === null}
-                        onPress={() => setForm((f) => ({ ...f, category_id: null }))}
-                        style={{ marginRight: 6, marginBottom: 6 }}
-                        compact
-                      >
-                        None
-                      </Chip>
+                      <Chip selected={form.category_id === null} onPress={() => setForm((f) => ({ ...f, category_id: null }))} style={{ marginRight: 6, marginBottom: 6 }} compact>None</Chip>
                       {categories!.map((c) => (
-                        <Chip
-                          key={c.id}
-                          selected={form.category_id === c.id}
-                          onPress={() => setForm((f) => ({ ...f, category_id: c.id }))}
-                          style={{ marginRight: 6, marginBottom: 6 }}
-                          compact
-                        >
-                          {c.name}
-                        </Chip>
+                        <Chip key={c.id} selected={form.category_id === c.id} onPress={() => setForm((f) => ({ ...f, category_id: c.id }))} style={{ marginRight: 6, marginBottom: 6, backgroundColor: c.color + '33' }} compact>{c.name}</Chip>
                       ))}
                     </View>
                   </View>
@@ -186,7 +236,13 @@ export default function ProductsScreen() {
         <Dialog visible={dialog === 'category'} onDismiss={closeDialog}>
           <Dialog.Title>Add Category</Dialog.Title>
           <Dialog.Content>
-            <TextInput label="Category Name" value={catName} onChangeText={setCatName} mode="outlined" />
+            <TextInput label="Category Name" value={catName} onChangeText={setCatName} mode="outlined" style={{ marginBottom: 16 }} />
+            <Text style={styles.sectionLabel}>Category Colour</Text>
+            <View style={styles.colorGrid}>
+              {PRESET_COLORS.map((c) => (
+                <Pressable key={c} style={[styles.colorSwatch, { backgroundColor: c }, catColor === c && styles.colorSelected]} onPress={() => setCatColor(c)} />
+              ))}
+            </View>
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={closeDialog}>Cancel</Button>
@@ -206,8 +262,11 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: 12, paddingBottom: 80 },
   productCard: { marginBottom: 8, borderRadius: 10 },
   productContent: { flexDirection: 'row', alignItems: 'center' },
+  productImage: { width: 48, height: 48, borderRadius: 8 },
+  productImagePlaceholder: { width: 48, height: 48, borderRadius: 8, backgroundColor: '#f5f5f5', alignItems: 'center', justifyContent: 'center' },
   productName: { fontSize: 14, fontWeight: '700', color: '#111' },
   productSub: { fontSize: 12, color: '#888', marginTop: 2 },
+  barcode: { fontSize: 10, color: '#aaa', marginTop: 1, fontFamily: 'monospace' },
   stockChip: { alignSelf: 'flex-start', marginTop: 4 },
   lowChip: { backgroundColor: '#fce4e4' },
   priceCol: { alignItems: 'flex-end', marginRight: 4 },
@@ -219,4 +278,12 @@ const styles = StyleSheet.create({
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingHorizontal: 4 },
   sectionLabel: { fontSize: 12, color: '#666', marginBottom: 6, marginTop: 4 },
   catRow: { flexDirection: 'row', flexWrap: 'wrap' },
+  imageRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  imagePreview: { width: 72, height: 72, borderRadius: 8 },
+  imagePlaceholder: { width: 72, height: 72, borderRadius: 8, backgroundColor: '#f5f5f5', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e0e0e0' },
+  imageButtons: { flex: 1, marginLeft: 12 },
+  scanBtn: { padding: 8 },
+  colorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  colorSwatch: { width: 36, height: 36, borderRadius: 18 },
+  colorSelected: { borderWidth: 3, borderColor: '#333' },
 });
