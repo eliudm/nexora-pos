@@ -52,6 +52,10 @@ export default function POSScreen() {
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [loyaltyBalance, setLoyaltyBalance] = useState(0);
   const [redeemPoints, setRedeemPoints] = useState('');
+  const [newCustDialogOpen, setNewCustDialogOpen] = useState(false);
+  const [newCustName, setNewCustName] = useState('');
+  const [newCustPhone, setNewCustPhone] = useState('');
+  const [newCustEmail, setNewCustEmail] = useState('');
 
   // Hold/Park
   const [holdDialogOpen, setHoldDialogOpen] = useState(false);
@@ -98,6 +102,25 @@ export default function POSScreen() {
     queryFn: () => customerQueries.getAll(customerSearch),
     enabled: customerDialogOpen,
   });
+
+  const createCustomerMutation = useMutation({
+    mutationFn: (data: { name: string; phone: string; email: string }) =>
+      customerQueries.create({ name: data.name, phone: data.phone || null, email: data.email || null, credit_balance: 0 }),
+    onSuccess: async (newId) => {
+      const created = await customerQueries.getById(newId);
+      if (created) onCustomerSelected(created);
+      qc.invalidateQueries({ queryKey: ['customers'] });
+      setNewCustDialogOpen(false);
+      setNewCustName('');
+      setNewCustPhone('');
+      setNewCustEmail('');
+    },
+  });
+
+  const handleCreateCustomer = () => {
+    if (!newCustName.trim()) { Alert.alert('Name Required', 'Enter the customer name.'); return; }
+    createCustomerMutation.mutate({ name: newCustName.trim(), phone: newCustPhone.trim(), email: newCustEmail.trim() });
+  };
 
   const { data: holdSales, refetch: refetchHolds } = useQuery({
     queryKey: ['hold-sales'],
@@ -745,7 +768,7 @@ export default function POSScreen() {
         <Dialog visible={customerDialogOpen} onDismiss={() => setCustomerDialogOpen(false)} style={{ backgroundColor: D.surface }}>
           <Dialog.Title style={{ color: D.text }}>Select Customer</Dialog.Title>
           <Dialog.Content>
-            <Searchbar placeholder="Search..." value={customerSearch} onChangeText={setCustomerSearch} style={{ marginBottom: 8, backgroundColor: D.elevated }} />
+            <Searchbar placeholder="Search by name or phone..." value={customerSearch} onChangeText={setCustomerSearch} style={{ marginBottom: 8, backgroundColor: D.elevated }} />
             {(customers ?? []).slice(0, 6).map((c) => (
               <Pressable key={c.id} style={[styles.customerRow, { borderBottomColor: D.border }]} onPress={() => onCustomerSelected(c)}>
                 <Text style={[styles.customerName, { color: D.text }]}>{c.name}</Text>
@@ -757,10 +780,69 @@ export default function POSScreen() {
                 </View>
               </Pressable>
             ))}
+            {/* Create new customer row — always visible, pre-fills name from search */}
+            <Pressable
+              style={[styles.customerRow, { borderBottomColor: 'transparent', flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }]}
+              onPress={() => {
+                setNewCustName(customerSearch);
+                setNewCustPhone('');
+                setNewCustEmail('');
+                setNewCustDialogOpen(true);
+              }}
+            >
+              <MaterialCommunityIcons name="account-plus-outline" size={20} color={D.accent} />
+              <Text style={{ color: D.accent, fontWeight: '700', fontSize: 13 }}>
+                {customerSearch.trim() ? `Create "${customerSearch}"` : 'Create new customer'}
+              </Text>
+            </Pressable>
           </Dialog.Content>
           <Dialog.Actions>
             <Button textColor={D.muted} onPress={() => { setSelectedCustomer(null); setLoyaltyBalance(0); setCustomerDialogOpen(false); }}>Clear</Button>
             <Button textColor={D.accent} onPress={() => setCustomerDialogOpen(false)}>Done</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* New Customer Form */}
+        <Dialog visible={newCustDialogOpen} onDismiss={() => setNewCustDialogOpen(false)} style={{ backgroundColor: D.surface }}>
+          <Dialog.Title style={{ color: D.text }}>New Customer</Dialog.Title>
+          <Dialog.Content>
+            <RNTextInput
+              placeholder="Name *"
+              placeholderTextColor={D.muted}
+              value={newCustName}
+              onChangeText={setNewCustName}
+              style={[styles.darkInput, { color: D.text, borderColor: D.border, backgroundColor: D.elevated, marginBottom: 10 }]}
+              autoFocus
+            />
+            <RNTextInput
+              placeholder="Phone (optional)"
+              placeholderTextColor={D.muted}
+              value={newCustPhone}
+              onChangeText={setNewCustPhone}
+              keyboardType="phone-pad"
+              style={[styles.darkInput, { color: D.text, borderColor: D.border, backgroundColor: D.elevated, marginBottom: 10 }]}
+            />
+            <RNTextInput
+              placeholder="Email (optional)"
+              placeholderTextColor={D.muted}
+              value={newCustEmail}
+              onChangeText={setNewCustEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              style={[styles.darkInput, { color: D.text, borderColor: D.border, backgroundColor: D.elevated }]}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button textColor={D.muted} onPress={() => setNewCustDialogOpen(false)}>Cancel</Button>
+            <Button
+              mode="contained"
+              buttonColor={D.accent}
+              textColor="#fff"
+              loading={createCustomerMutation.isPending}
+              onPress={handleCreateCustomer}
+            >
+              Create &amp; Select
+            </Button>
           </Dialog.Actions>
         </Dialog>
 
