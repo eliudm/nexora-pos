@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { LogBox } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
+// React Native Paper 5.x passes `compact` to React.Fragment internally — harmless in RN 19
+LogBox.ignoreLogs(['Invalid prop `compact` supplied to `React.Fragment`']);
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PaperProvider } from 'react-native-paper';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
