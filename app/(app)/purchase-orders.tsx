@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, FlatList, Alert, ScrollView } from 'react-native';
+import { View, StyleSheet, FlatList, Alert, ScrollView, Pressable, Platform } from 'react-native';
 import { Text, Button, Appbar, Card, Portal, Dialog, TextInput, FAB, Chip, Divider, IconButton } from 'react-native-paper';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -33,7 +34,8 @@ export default function PurchaseOrdersScreen() {
   const [supplierPickerOpen, setSupplierPickerOpen] = useState(false);
   const [poItems, setPoItems] = useState<Omit<POItem, 'id' | 'po_id'>[]>([]);
   const [notes, setNotes] = useState('');
-  const [expectedDate, setExpectedDate] = useState('');
+  const [expectedDate, setExpectedDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [productPickerOpen, setProductPickerOpen] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [receiveVisible, setReceiveVisible] = useState(false);
@@ -76,7 +78,7 @@ export default function PurchaseOrdersScreen() {
       setPoItems([]);
       setSupplier(null);
       setNotes('');
-      setExpectedDate('');
+      setExpectedDate(dayjs().format('YYYY-MM-DD'));
     },
     onError: (e: any) => Alert.alert('Error', e.message),
   });
@@ -246,16 +248,27 @@ export default function PurchaseOrdersScreen() {
                 {supplier ? supplier.name : 'Select Supplier (optional)'}
               </Button>
 
-              <View style={styles.row}>
-                <TextInput
-                  label="Expected Date (YYYY-MM-DD)"
-                  value={expectedDate}
-                  onChangeText={setExpectedDate}
-                  mode="outlined"
-                  style={{ flex: 1 }}
-                  placeholder="2025-01-31"
+              <Pressable onPress={() => setDatePickerOpen(true)} style={({ pressed }) => [styles.datePressable, pressed && { opacity: 0.7 }]}>
+                <MaterialCommunityIcons name="calendar" size={18} color={C.accent} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.dateLabel}>Expected Delivery Date</Text>
+                  <Text style={styles.dateValue}>{dayjs(expectedDate).format('D MMMM YYYY')}</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-down" size={18} color={C.muted} />
+              </Pressable>
+
+              {datePickerOpen && (
+                <DateTimePicker
+                  value={new Date(expectedDate)}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  minimumDate={new Date()}
+                  onChange={(_event, date) => {
+                    setDatePickerOpen(Platform.OS === 'ios');
+                    if (date) setExpectedDate(dayjs(date).format('YYYY-MM-DD'));
+                  }}
                 />
-              </View>
+              )}
 
               <TextInput label="Notes" value={notes} onChangeText={setNotes} mode="outlined" style={[styles.input, { marginTop: 8 }]} />
               <Divider style={{ marginVertical: 10 }} />
@@ -524,6 +537,9 @@ function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
     dialog: { marginHorizontal: 8 },
     input: { marginBottom: 10 },
     row: { marginBottom: 10 },
+    datePressable: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: C.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, marginBottom: 10, backgroundColor: C.surface },
+    dateLabel: { fontSize: 11, color: C.muted },
+    dateValue: { fontSize: 15, fontWeight: '600', color: C.text, marginTop: 1 },
     sectionLabel: { fontSize: 13, fontWeight: '700', color: C.muted, marginBottom: 8 },
     poItemRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
     poItemInput: { flex: 0 },
