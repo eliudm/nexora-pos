@@ -401,6 +401,14 @@ export default function POSScreen() {
 
   // ---- Confirm sale ----
   const handleConfirmSale = () => {
+    if (cart.length === 0) {
+      Alert.alert('Empty Cart', 'Add items to the cart before checking out.');
+      return;
+    }
+    if (total <= 0 && orderDiscount === 0) {
+      Alert.alert('Invalid Total', 'Sale total must be greater than 0.');
+      return;
+    }
     if (payMethod === 'MPESA' && !mpesaRef.trim()) {
       Alert.alert('M-Pesa Reference', 'Please enter the M-Pesa transaction code.');
       return;

@@ -144,6 +144,19 @@ export default function ProductsScreen() {
 
   const closeDialog = () => { setDialog(null); setEditing(null); setForm({ ...EMPTY_PRODUCT }); setCatName(''); setCatColor(C.accent); };
 
+  const handleSaveProduct = () => {
+    if (!form.name.trim()) {
+      Alert.alert('Name Required', 'Enter a product name before saving.');
+      return;
+    }
+    const price = parseFloat(form.price);
+    if (isNaN(price) || price <= 0) {
+      Alert.alert('Price Required', 'Enter a valid selling price greater than 0.');
+      return;
+    }
+    saveMutation.mutate();
+  };
+
   const openEdit = (p: Product) => {
     setEditing(p);
     setForm({
@@ -328,7 +341,7 @@ export default function ProductsScreen() {
           </KeyboardAvoidingView>
           <Dialog.Actions>
             <Button onPress={closeDialog}>Cancel</Button>
-            <Button mode="contained" onPress={() => saveMutation.mutate()} loading={saveMutation.isPending}>Save</Button>
+            <Button mode="contained" onPress={handleSaveProduct} loading={saveMutation.isPending}>Save</Button>
           </Dialog.Actions>
         </Dialog>
 
