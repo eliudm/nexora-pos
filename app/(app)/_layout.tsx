@@ -78,13 +78,20 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="more"
+        options={{
+          title: 'More',
+          tabBarIcon: ({ color, size }) => <TabIcon name="dots-grid" color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
           tabBarIcon: ({ color, size }) => <TabIcon name="cog" color={color} size={size} />,
         }}
       />
-      {/* Secondary screens — hidden from tab bar, navigated via router.push */}
+      {/* Secondary screens — navigated via router.push from more.tsx */}
       <Tabs.Screen name="suppliers" options={{ href: null }} />
       <Tabs.Screen name="purchase-orders" options={{ href: null }} />
       <Tabs.Screen name="expenses" options={{ href: null }} />
