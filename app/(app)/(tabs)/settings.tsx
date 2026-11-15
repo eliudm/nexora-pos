@@ -347,8 +347,8 @@ export default function SettingsScreen() {
             {openShift ? (
               <>
                 <List.Item
-                  title={`Shift Open â€” ${openShift.cashier_name}`}
-                  description={`Opened ${dayjs(openShift.opened_at).format('D MMM HH:mm')} Â· Opening cash: ${fmt(openShift.opening_cash)}`}
+                  title={`Shift Open — ${openShift.cashier_name}`}
+                  description={`Opened ${dayjs(openShift.opened_at).format('D MMM HH:mm')} · Opening cash: ${fmt(openShift.opening_cash)}`}
                   left={(p) => <List.Icon {...p} icon="clock-check" color="#22c55e" />}
                 />
                 <Card.Content>
@@ -459,7 +459,7 @@ export default function SettingsScreen() {
                 <Button mode={!waEnabled ? 'contained' : 'outlined'} onPress={() => setWaEnabled(false)} compact style={{ flex: 1 }}>Disabled</Button>
               </View>
 
-              <Text style={[styles.subSection, { marginTop: 16 }]}>Africa's Talking â€” SMS</Text>
+              <Text style={[styles.subSection, { marginTop: 16 }]}>Africa's Talking — SMS</Text>
               <Text style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Send SMS receipts via Africa's Talking. Register at africastalking.com</Text>
               <TextInput label="API Key" value={atsApiKey} onChangeText={setAtsApiKey} mode="outlined" style={styles.input} autoCapitalize="none" secureTextEntry />
               <TextInput label="Sender ID (shortcode)" value={atsSenderId} onChangeText={setAtsSenderId} mode="outlined" style={styles.input} />
@@ -509,7 +509,7 @@ export default function SettingsScreen() {
 
           <Text style={styles.section}>About</Text>
           <Card style={styles.card}>
-            <List.Item title="Nexora POS" description="Version 1.0.0 â€” Standalone Android POS" left={(p) => <List.Icon {...p} icon="cash-register" color={C.accent} />} />
+            <List.Item title="Nexora POS" description="Version 1.0.0 — Standalone Android POS" left={(p) => <List.Icon {...p} icon="cash-register" color={C.accent} />} />
             <Divider />
             <List.Item title="Subscription" description="KES 600/month via Google Play" left={(p) => <List.Icon {...p} icon="google-play" color={C.accent} />} />
           </Card>

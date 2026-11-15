@@ -446,7 +446,7 @@ export default function ProductsScreen() {
         {/* Variants Dialog */}
         <Dialog visible={dialog === 'variants'} onDismiss={() => { setDialog(null); setVariantProduct(null); }}>
           <Dialog.ScrollArea style={{ maxHeight: 500 }}>
-            <Dialog.Title>{variantProduct?.name} â€” Variants</Dialog.Title>
+            <Dialog.Title>{variantProduct?.name} — Variants</Dialog.Title>
             <View style={{ padding: 16 }}>
               {variants.length === 0 && <Text style={{ color: '#aaa', marginBottom: 12 }}>No variants yet. Add sizes, colours, etc.</Text>}
               {variants.map((v) => (

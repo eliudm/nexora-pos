@@ -554,7 +554,7 @@ export default function POSScreen() {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: D.bg }]}>
 
-      {/* â"€â"€ Header â"€â"€ */}
+      {/* —— Header —— */}
       <View style={[styles.header, { backgroundColor: D.surface, borderBottomColor: D.border }]}>
         <View style={{ flex: 1 }}>
           <Text style={[styles.headerTitle, { color: D.text }]}>Point of Sale</Text>
@@ -577,7 +577,7 @@ export default function POSScreen() {
         </Pressable>
       </View>
 
-      {/* â"€â"€ Search â"€â"€ */}
+      {/* —— Search —— */}
       <View style={[styles.searchWrap, { backgroundColor: D.elevated, borderColor: D.border }]}>
         <MaterialCommunityIcons name="magnify" size={18} color={D.muted} style={{ marginRight: 8 }} />
         <RNTextInput
@@ -594,7 +594,7 @@ export default function POSScreen() {
         )}
       </View>
 
-      {/* â"€â"€ Categories â"€â"€ */}
+      {/* —— Categories —— */}
       {(categories?.length ?? 0) > 0 && (
         <FlatList
           data={[{ id: null, name: 'All' }, ...(categories ?? [])]}
@@ -620,7 +620,7 @@ export default function POSScreen() {
         />
       )}
 
-      {/* â"€â"€ Product Grid â€" 3 columns, full width â"€â"€ */}
+      {/* —— Product Grid — 3 columns, full width —— */}
       {isLoading ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator size="large" color={D.accent} />
@@ -664,7 +664,7 @@ export default function POSScreen() {
         />
       )}
 
-      {/* â"€â"€ Sticky Cart Bar â"€â"€ */}
+      {/* —— Sticky Cart Bar —— */}
       {cart.length > 0 && (
         <View style={[styles.cartBar, { backgroundColor: D.surface, borderTopColor: D.border }]}>
           <Pressable style={styles.cartBarInfo} onPress={() => setCartModalVisible(true)}>
@@ -687,7 +687,7 @@ export default function POSScreen() {
       )}
 
       <Portal>
-        {/* â"€â"€ Cart Modal (bottom sheet style) â"€â"€ */}
+        {/* —— Cart Modal (bottom sheet style) —— */}
         <Dialog
           visible={cartModalVisible}
           onDismiss={() => setCartModalVisible(false)}
@@ -697,7 +697,7 @@ export default function POSScreen() {
           <View style={[styles.cartModalHeader, { borderBottomColor: D.border }]}>
             <View>
               <Text style={[styles.cartTitle, { color: D.text }]}>Cart</Text>
-              <Text style={[styles.cartSubtitle, { color: D.muted }]}>{cartItemCount} item{cartItemCount !== 1 ? 's' : ''} Â· KES {total.toFixed(0)}</Text>
+              <Text style={[styles.cartSubtitle, { color: D.muted }]}>{cartItemCount} item{cartItemCount !== 1 ? 's' : ''} · KES {total.toFixed(0)}</Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Pressable
@@ -732,7 +732,7 @@ export default function POSScreen() {
                 <View style={[styles.cartItem, { borderBottomColor: D.border, paddingHorizontal: 16 }]}>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.cartItemName, { color: D.text }]} numberOfLines={1}>{item.product_name}</Text>
-                    <Text style={[styles.cartItemPrice, { color: D.muted }]}>@ KES {item.unit_price.toLocaleString()}{item.discount > 0 ? `  âˆ'${item.discount.toFixed(0)}` : ''}</Text>
+                    <Text style={[styles.cartItemPrice, { color: D.muted }]}>@ KES {item.unit_price.toLocaleString()}{item.discount > 0 ? `  -${item.discount.toFixed(0)}` : ''}</Text>
                   </View>
                   <View style={styles.qtyRow}>
                     <Pressable style={[styles.qtyBtn, { backgroundColor: D.elevated, borderColor: '#e53935' }]} onPress={() => updateQty(item.product_id, item.qty - 1)}>
@@ -769,19 +769,19 @@ export default function POSScreen() {
             {itemDiscountTotal > 0 && (
               <View style={styles.totalRow}>
                 <Text style={[styles.totalLabel, { color: D.muted }]}>Discounts</Text>
-                <Text style={[styles.totalVal, { color: D.danger }]}>âˆ'KES {itemDiscountTotal.toFixed(0)}</Text>
+                <Text style={[styles.totalVal, { color: D.danger }]}>-KES {itemDiscountTotal.toFixed(0)}</Text>
               </View>
             )}
             {orderDiscount > 0 && (
               <View style={styles.totalRow}>
                 <Text style={[styles.totalLabel, { color: D.muted }]}>Order Discount</Text>
-                <Text style={[styles.totalVal, { color: D.danger }]}>âˆ'KES {orderDiscount}</Text>
+                <Text style={[styles.totalVal, { color: D.danger }]}>-KES {orderDiscount}</Text>
               </View>
             )}
             {loyaltyDiscount > 0 && (
               <View style={styles.totalRow}>
                 <Text style={[styles.totalLabel, { color: D.muted }]}>Loyalty</Text>
-                <Text style={[styles.totalVal, { color: D.warning }]}>âˆ'KES {loyaltyDiscount.toFixed(0)}</Text>
+                <Text style={[styles.totalVal, { color: D.warning }]}>-KES {loyaltyDiscount.toFixed(0)}</Text>
               </View>
             )}
             <View style={[styles.grandTotalRow, { backgroundColor: D.elevated, borderColor: D.border }]}>
@@ -1289,7 +1289,7 @@ export default function POSScreen() {
                 <Pressable key={h.id} style={[styles.holdRow, { borderBottomColor: D.border }]} onPress={() => resumeHeldSale(h)}>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.holdLabel, { color: D.text }]}>{h.label || `Held at ${dayjs(h.created_at).format('HH:mm')}`}</Text>
-                    <Text style={[styles.holdSub, { color: D.muted }]}>{h.customer_name ?? 'No customer'} Â· {(h.items?.length ?? 0)} items</Text>
+                    <Text style={[styles.holdSub, { color: D.muted }]}>{h.customer_name ?? 'No customer'} · {(h.items?.length ?? 0)} items</Text>
                   </View>
                   <MaterialCommunityIcons name="play-circle" size={24} color={D.accent} />
                 </Pressable>
@@ -1308,7 +1308,7 @@ export default function POSScreen() {
             {selectedCustomer && (
               <View style={[styles.checkoutCustomer, { backgroundColor: D.elevated, borderColor: D.border }]}>
                 <Text style={{ color: D.text, fontSize: 12, fontWeight: '600' }}>{selectedCustomer.name}</Text>
-                <Text style={{ color: D.muted, fontSize: 11 }}>Balance: KES {selectedCustomer.credit_balance.toLocaleString()} Â· {loyaltyBalance} pts</Text>
+                <Text style={{ color: D.muted, fontSize: 11 }}>Balance: KES {selectedCustomer.credit_balance.toLocaleString()} · {loyaltyBalance} pts</Text>
               </View>
             )}
             <Text style={{ marginBottom: 8, fontWeight: '600', color: D.muted, fontSize: 12, marginTop: 4 }}>PAYMENT METHOD</Text>
@@ -1446,7 +1446,7 @@ const styles = StyleSheet.create({
   catList: { maxHeight: 50 },
   catChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
   catText: { fontSize: 13, fontWeight: '600' },
-  // Product grid â€" 3 columns
+  // Product grid — 3 columns
   productGrid: { padding: 10, paddingBottom: 100, gap: 10 },
   productCard: { flex: 1, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 8, alignItems: 'center', borderWidth: 1 },
   productIconWrap: { width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },

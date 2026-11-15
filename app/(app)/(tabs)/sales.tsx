@@ -170,7 +170,7 @@ export default function SalesScreen() {
 
       <Portal>
         <Dialog visible={!!selected} onDismiss={() => setSelected(null)}>
-          <Dialog.Title>Receipt â€” {selected?.invoice_no}</Dialog.Title>
+          <Dialog.Title>Receipt — {selected?.invoice_no}</Dialog.Title>
           <Dialog.Content>
             <Text style={styles.receiptDate}>{dayjs(selected?.created_at).format('D MMM YYYY, HH:mm')}</Text>
             {selected?.customer_name && <Text style={styles.receiptCustomer}>Customer: {selected.customer_name}</Text>}

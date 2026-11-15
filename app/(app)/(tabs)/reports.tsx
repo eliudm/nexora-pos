@@ -155,7 +155,7 @@ export default function ReportsScreen() {
     ).join('');
     const html = `
       <html><body style="font-family:sans-serif;padding:24px;max-width:700px;margin:0 auto">
-        <h1 style="color:#1db8a0">${bizInfo?.name ?? 'Nexora POS'} â€” Sales Report</h1>
+        <h1 style="color:#1db8a0">${bizInfo?.name ?? 'Nexora POS'} — Sales Report</h1>
         <p style="color:#666">Period: <b>${label}</b> (${from} to ${to})</p>
         <hr/>
         <h2>Summary</h2>
@@ -563,7 +563,7 @@ export default function ReportsScreen() {
               <Card.Content>
                 {openShift ? (
                   <Text style={{ fontSize: 12, color: '#22c55e', marginBottom: 8 }}>
-                    Shift open â€” {openShift.cashier_name} since {dayjs(openShift.opened_at).format('HH:mm')} Â· Opening cash: {fmt(openShift.opening_cash)}
+                    Shift open — {openShift.cashier_name} since {dayjs(openShift.opened_at).format('HH:mm')} · Opening cash: {fmt(openShift.opening_cash)}
                   </Text>
                 ) : (
                   <Text style={{ fontSize: 12, color: '#aaa', marginBottom: 8 }}>No open shift</Text>
