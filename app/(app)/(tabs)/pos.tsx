@@ -633,8 +633,8 @@ export default function POSScreen() {
                     <Pressable style={[styles.qtyBtn, { backgroundColor: D.elevated, borderColor: D.border }]} onPress={() => updateQty(item.product_id, item.qty - 1)}>
                       <Text style={[styles.qtyBtnText, { color: D.text }]}>âˆ’</Text>
                     </Pressable>
-                    <Pressable onLongPress={() => { setQtyDialogItem(item); setQtyInput(String(item.qty)); }}>
-                      <Text style={[styles.qtyVal, { color: D.text }]}>{item.qty}</Text>
+                    <Pressable onPress={() => { setQtyDialogItem(item); setQtyInput(String(item.qty)); }}>
+                      <Text style={[styles.qtyVal, { color: D.accent, textDecorationLine: 'underline' }]}>{item.qty}</Text>
                     </Pressable>
                     <Pressable style={[styles.qtyBtn, { backgroundColor: D.accent }]} onPress={() => updateQty(item.product_id, item.qty + 1)}>
                       <Text style={[styles.qtyBtnText, { color: '#fff' }]}>+</Text>
@@ -761,10 +761,16 @@ export default function POSScreen() {
               value={qtyInput}
               onChangeText={setQtyInput}
               keyboardType="decimal-pad"
-              style={[styles.darkInput, { color: D.text, borderColor: D.border, backgroundColor: D.elevated }]}
+              style={[styles.darkInput, { color: D.text, borderColor: D.border, backgroundColor: D.elevated, fontSize: 24, textAlign: 'center', fontWeight: '700' }]}
               placeholderTextColor={D.muted}
               autoFocus
-              placeholder="Enter quantity"
+              selectTextOnFocus
+              placeholder="0"
+              onSubmitEditing={() => {
+                const q = parseFloat(qtyInput);
+                if (qtyDialogItem && !isNaN(q)) updateQty(qtyDialogItem.product_id, q);
+                setQtyDialogItem(null);
+              }}
             />
           </Dialog.Content>
           <Dialog.Actions>
