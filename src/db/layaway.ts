@@ -115,4 +115,51 @@ export const layawayQueries = {
     const db = await getDb();
     await db.runAsync("UPDATE layaways SET status = 'CANCELLED' WHERE id = ?", [id]);
   },
+
+  postAsSale: async (layawayId: number, cashierId?: number | null): Promise<{
+    invoiceNo: string;
+    paymentMethod: string;
+    mpesaRef: string | null;
+    total: number;
+    customerName: string | null;
+    description: string | null;
+  }> => {
+    const db = await getDb();
+    const layaway = await db.getFirstAsync<Layaway>('SELECT * FROM layaways WHERE id = ?', [layawayId]);
+    if (!layaway) throw new Error('Layaway not found');
+
+    const lastPay = await db.getFirstAsync<{ payment_method: string; mpesa_ref: string | null }>(
+      'SELECT payment_method, mpesa_ref FROM layaway_payments WHERE layaway_id = ? ORDER BY created_at DESC LIMIT 1',
+      [layawayId],
+    );
+    const payMethod = lastPay?.payment_method ?? 'CASH';
+    const mpesaRef = payMethod === 'MPESA' ? (lastPay?.mpesa_ref ?? null) : null;
+
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const existing = await db.getFirstAsync<{ c: number }>(
+      "SELECT COUNT(*) as c FROM sales WHERE date(created_at) = date('now')",
+    );
+    const seq = String((existing?.c ?? 0) + 1).padStart(4, '0');
+    const invoiceNo = `INV-${dateStr}-${seq}`;
+
+    const result = await db.runAsync(
+      `INSERT INTO sales (invoice_no, customer_id, cashier_id, subtotal, tax_amount, discount, total, payment_method, mpesa_ref, status, note)
+       VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, 'PAID', ?)`,
+      [invoiceNo, layaway.customer_id, cashierId ?? null,
+       layaway.total_amount, layaway.total_amount,
+       payMethod, mpesaRef,
+       `Layaway: ${layaway.layaway_no}`],
+    );
+    const saleId = result.lastInsertRowId;
+
+    await db.runAsync(
+      `INSERT INTO sale_items (sale_id, product_id, product_name, qty, unit_price, cost_price, discount, vat_rate, vat_amount, total)
+       VALUES (?, NULL, ?, 1, ?, 0, 0, 0, 0, ?)`,
+      [saleId, layaway.description ?? 'Layaway Item', layaway.total_amount, layaway.total_amount],
+    );
+
+    await db.runAsync("UPDATE layaways SET status = 'COMPLETED' WHERE id = ?", [layawayId]);
+
+    return { invoiceNo, paymentMethod: payMethod, mpesaRef, total: layaway.total_amount, customerName: layaway.customer_name, description: layaway.description };
+  },
 };
