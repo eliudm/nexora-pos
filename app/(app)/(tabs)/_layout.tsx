@@ -51,10 +51,7 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="customers"
-        options={{
-          title: 'Customers',
-          tabBarIcon: ({ color, size }) => <TabIcon name="account-group" color={color} size={size} />,
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="sales"
@@ -72,10 +69,7 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="analytics"
-        options={{
-          title: 'Analytics',
-          tabBarIcon: ({ color, size }) => <TabIcon name="chart-line" color={color} size={size} />,
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="more"

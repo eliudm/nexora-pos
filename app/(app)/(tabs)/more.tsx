@@ -26,6 +26,13 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
     title: 'Intelligence',
     items: [
       { label: 'Smart Insights', description: 'On-device business intelligence, instant & free', icon: 'brain', route: '/ai-insights', color: '#6f67ff' },
+      { label: 'Analytics', description: 'Deep-dive charts and performance trends', icon: 'chart-line', route: '/analytics', color: '#1db8a0' },
+    ],
+  },
+  {
+    title: 'People',
+    items: [
+      { label: 'Customers', description: 'Manage customer accounts and credit', icon: 'account-group-outline', route: '/customers', color: '#3b82f6' },
     ],
   },
   {
