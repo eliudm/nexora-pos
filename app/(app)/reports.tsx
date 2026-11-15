@@ -62,6 +62,12 @@ export default function ReportsScreen() {
     enabled: reportTab === 'stock' || reportTab === 'profit',
   });
 
+  const { data: cogsData } = useQuery({
+    queryKey: ['cogs-report', from, to],
+    queryFn: () => salesQueries.getCOGS(from, to),
+    enabled: reportTab === 'profit',
+  });
+
   const { data: allCustomers } = useQuery({
     queryKey: ['customers-report'],
     queryFn: () => customerQueries.getAll(),
@@ -89,17 +95,7 @@ export default function ReportsScreen() {
   const expectedCredit = todaySales.filter(s => s.payment_method === 'CREDIT').reduce((a, s) => a + s.total, 0);
   const cashVariance = (parseFloat(actualCash) || 0) - ((openShift?.opening_cash ?? 0) + expectedCash);
 
-  // Profit/loss data: revenue minus COGS estimate (cost × qty from sale_items × product cost ratio)
-  const totalCOGS = (() => {
-    if (!sales) return 0;
-    return (sales).reduce((s, sale) => {
-      const items = sale.items ?? [];
-      return s + items.reduce((si, item) => {
-        const prod = allProducts?.find((p) => p.id === item.product_id);
-        return si + (prod?.cost ?? 0) * item.qty;
-      }, 0);
-    }, 0);
-  })();
+  const totalCOGS = cogsData ?? 0;
 
   // Stock valuation
   const stockAtCost = (allProducts ?? []).filter((p) => p.track_stock).reduce((s, p) => s + p.cost * p.stock_qty, 0);

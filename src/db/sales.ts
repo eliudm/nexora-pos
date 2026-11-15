@@ -301,4 +301,15 @@ export const salesQueries = {
       ORDER BY revenue DESC
     `, [from, to]);
   },
+
+  getCOGS: async (from: string, to: string): Promise<number> => {
+    const db = await getDb();
+    const row = await db.getFirstAsync<{ total_cogs: number }>(`
+      SELECT COALESCE(SUM(si.cost_price * si.qty), 0) as total_cogs
+      FROM sale_items si
+      JOIN sales s ON si.sale_id = s.id
+      WHERE date(s.created_at) BETWEEN ? AND ? AND s.status = 'PAID'
+    `, [from, to]);
+    return row?.total_cogs ?? 0;
+  },
 };
