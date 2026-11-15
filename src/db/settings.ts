@@ -24,5 +24,6 @@ export const getBusinessInfo = async () => {
     receiptFooter: map['receipt_footer'] ?? 'Thank you for your business!',
     mpesaPaybill: map['mpesa_paybill'] ?? '',
     mpesaTill: map['mpesa_till'] ?? '',
+    dailySalesTarget: map['daily_sales_target'] ? parseFloat(map['daily_sales_target']) : 0,
   };
 };

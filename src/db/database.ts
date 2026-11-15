@@ -345,6 +345,7 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   await safeAlter('ALTER TABLE customers ADD COLUMN loyalty_points INTEGER DEFAULT 0');
   await safeAlter('ALTER TABLE products ADD COLUMN low_stock_threshold REAL DEFAULT 0');
   await safeAlter('ALTER TABLE products ADD COLUMN reorder_qty REAL DEFAULT 0');
+  await safeAlter('ALTER TABLE products ADD COLUMN expiry_date TEXT');
   await safeAlter('ALTER TABLE sale_items ADD COLUMN cost_price REAL DEFAULT 0');
   await safeAlter('ALTER TABLE vendor_bills ADD COLUMN vat_rate REAL DEFAULT 16');
   await safeAlter('ALTER TABLE vendor_bills ADD COLUMN vat_amount REAL DEFAULT 0');

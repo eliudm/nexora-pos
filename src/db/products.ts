@@ -13,6 +13,9 @@ export interface Product {
   vat_rate: number;
   is_active: number;
   image_uri: string | null;
+  low_stock_threshold: number;
+  reorder_qty: number;
+  expiry_date: string | null;
 }
 
 export interface Category {
@@ -90,5 +93,42 @@ export const productQueries = {
   deleteCategory: async (id: number): Promise<void> => {
     const db = await getDb();
     await db.runAsync('DELETE FROM categories WHERE id = ?', [id]);
+  },
+
+  getOutOfStock: async (): Promise<Product[]> => {
+    const db = await getDb();
+    return db.getAllAsync<Product>(
+      `SELECT p.*, c.name as category_name FROM products p
+       LEFT JOIN categories c ON p.category_id = c.id
+       WHERE p.is_active = 1 AND p.track_stock = 1 AND p.stock_qty <= 0
+       ORDER BY p.name`,
+    );
+  },
+
+  getLowStock: async (): Promise<Product[]> => {
+    const db = await getDb();
+    return db.getAllAsync<Product>(
+      `SELECT p.*, c.name as category_name FROM products p
+       LEFT JOIN categories c ON p.category_id = c.id
+       WHERE p.is_active = 1 AND p.track_stock = 1
+         AND p.low_stock_threshold > 0
+         AND p.stock_qty > 0
+         AND p.stock_qty <= p.low_stock_threshold
+       ORDER BY p.stock_qty ASC`,
+    );
+  },
+
+  getExpiring: async (daysAhead = 30): Promise<Product[]> => {
+    const db = await getDb();
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() + daysAhead);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    return db.getAllAsync<Product>(
+      `SELECT p.*, c.name as category_name FROM products p
+       LEFT JOIN categories c ON p.category_id = c.id
+       WHERE p.is_active = 1 AND p.expiry_date IS NOT NULL AND p.expiry_date <= ?
+       ORDER BY p.expiry_date ASC`,
+      [cutoffStr],
+    );
   },
 };

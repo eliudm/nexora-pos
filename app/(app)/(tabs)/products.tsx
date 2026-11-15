@@ -17,7 +17,7 @@ type DialogMode = 'product' | 'category' | 'barcode' | 'wastage' | 'variants' | 
 const EMPTY_PRODUCT = {
   name: '', price: '', cost: '', barcode: '', stock_qty: '0',
   track_stock: true, vat_rate: '16', category_id: null as number | null, image_uri: null as string | null,
-  low_stock_threshold: '5', reorder_qty: '10',
+  low_stock_threshold: '5', reorder_qty: '10', expiry_date: '',
 };
 
 const PRESET_COLORS = ['#1db8a0', '#6f67ff', '#f59e0b', '#e53935', '#22c55e', '#3b82f6', '#ec4899', '#8b5cf6', '#f97316', '#64748b'];
@@ -66,6 +66,7 @@ export default function ProductsScreen() {
         category_id: form.category_id, image_uri: form.image_uri, is_active: 1,
         low_stock_threshold: parseFloat(form.low_stock_threshold) || 0,
         reorder_qty: parseFloat(form.reorder_qty) || 0,
+        expiry_date: form.expiry_date.trim() || null,
       };
       if (editing) await productQueries.update(editing.id, data);
       else await productQueries.create(data);
@@ -212,8 +213,9 @@ export default function ProductsScreen() {
       name: p.name, price: String(p.price), cost: String(p.cost), barcode: p.barcode ?? '',
       stock_qty: String(p.stock_qty), track_stock: p.track_stock === 1, vat_rate: String(p.vat_rate),
       category_id: p.category_id, image_uri: p.image_uri,
-      low_stock_threshold: String((p as any).low_stock_threshold ?? 5),
-      reorder_qty: String((p as any).reorder_qty ?? 10),
+      low_stock_threshold: String(p.low_stock_threshold ?? 5),
+      reorder_qty: String(p.reorder_qty ?? 10),
+      expiry_date: p.expiry_date ?? '',
     });
     setDialog('product');
   };
@@ -394,6 +396,7 @@ export default function ProductsScreen() {
                       <TextInput label="Low Stock Alert at" value={form.low_stock_threshold} onChangeText={(v) => setForm((f) => ({ ...f, low_stock_threshold: v }))} mode="outlined" keyboardType="numeric" style={[styles.input, { flex: 1, marginRight: 8 }]} />
                       <TextInput label="Reorder Qty" value={form.reorder_qty} onChangeText={(v) => setForm((f) => ({ ...f, reorder_qty: v }))} mode="outlined" keyboardType="numeric" style={[styles.input, { flex: 1 }]} />
                     </View>
+                    <TextInput label="Expiry Date (YYYY-MM-DD)" value={form.expiry_date} onChangeText={(v) => setForm((f) => ({ ...f, expiry_date: v }))} mode="outlined" placeholder="e.g. 2025-12-31" style={styles.input} />
                   </>
                 )}
                 {(categories?.length ?? 0) > 0 && (
