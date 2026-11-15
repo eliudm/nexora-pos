@@ -142,9 +142,11 @@ export function buildReceiptHtml(sale: ReceiptSale, biz: BusinessInfo): string {
   ).join('');
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
+    <meta name="viewport" content="width=300, initial-scale=1.0">
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { font-family: 'Courier New', monospace; max-width: 300px; margin: 0 auto; padding: 12px 10px; font-size: 12px; color: #000; background: #fff; }
+      html, body { width: 300px; }
+      body { font-family: 'Courier New', monospace; width: 300px; padding: 12px 10px; font-size: 12px; color: #000; background: #fff; }
       h1 { font-size: 16px; text-align: center; font-weight: 900; margin-bottom: 2px; }
       p { text-align: center; margin: 1px 0; font-size: 11px; }
       hr { border: none; border-top: 1px dashed #000; margin: 6px 0; }
@@ -154,7 +156,7 @@ export function buildReceiptHtml(sale: ReceiptSale, biz: BusinessInfo): string {
       table { width: 100%; border-collapse: collapse; }
       .total-row td { font-weight: 700; font-size: 13px; padding: 4px 2px; border-top: 1px solid #000; border-bottom: 1px solid #000; }
       .vat-row td { font-size: 10px; color: #555; padding: 2px; }
-      @media print { @page { size: 80mm auto; margin: 4mm; } }
+      @media print { @page { size: 80mm auto; margin: 4mm; } body { width: 72mm; } }
     </style>
   </head><body>
     <h1>${biz.name}</h1>
