@@ -18,9 +18,9 @@ export const getBusinessInfo = async () => {
   rows.forEach(r => { map[r.key] = r.value; });
   return {
     name: map['business_name'] ?? '',
-    phone: map['business_phone'] ?? '',
-    address: map['business_address'] ?? '',
-    vatNo: map['vat_number'] ?? '',
+    phone: map['phone'] ?? '',
+    address: map['address'] ?? '',
+    vatNo: map['vat_no'] ?? '',
     receiptFooter: map['receipt_footer'] ?? 'Thank you for your business!',
     mpesaPaybill: map['mpesa_paybill'] ?? '',
     mpesaTill: map['mpesa_till'] ?? '',
