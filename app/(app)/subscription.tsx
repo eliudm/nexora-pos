@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
-import { subscriptionService, type SubscriptionStatus } from '../../src/services/subscription';
+import { subscriptionService, TRIAL_DAYS, type SubscriptionStatus } from '../../src/services/subscription';
 import { getBusinessInfo } from '../../src/db/settings';
 import { useTheme } from '../../src/context/theme';
 import dayjs from 'dayjs';
@@ -40,6 +40,7 @@ export default function SubscriptionScreen() {
   const [payState, setPayState] = useState<PayState>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [currentStatus, setCurrentStatus] = useState<SubscriptionStatus | null>(null);
+  const [trialDaysLeft, setTrialDaysLeft] = useState<number>(TRIAL_DAYS);
 
   // M-Pesa fields
   const [mpesaPhone, setMpesaPhone] = useState('');
@@ -65,8 +66,9 @@ export default function SubscriptionScreen() {
     }
   }, [bizInfo]);
 
-  // Check current status on mount
+  // Check current status and trial on mount
   useEffect(() => {
+    subscriptionService.getTrialInfo().then(t => setTrialDaysLeft(t.daysLeft));
     if (bizInfo?.phone) {
       subscriptionService.checkStatus(bizInfo.phone).then(setCurrentStatus).catch(() => {});
     }
@@ -181,6 +183,31 @@ export default function SubscriptionScreen() {
             )}
           </Card.Content>
         </Card>
+
+        {/* Trial status (only shown when not yet subscribed) */}
+        {!isActive && (
+          <Card style={[styles.card, { borderColor: trialDaysLeft > 0 ? '#f59e0b66' : '#e5393566', borderWidth: 1 }]}>
+            <Card.Content>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <MaterialCommunityIcons
+                  name={trialDaysLeft > 0 ? 'clock-outline' : 'clock-alert-outline'}
+                  size={22}
+                  color={trialDaysLeft > 0 ? '#d97706' : '#e53935'}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontWeight: '800', color: trialDaysLeft > 0 ? '#d97706' : '#e53935', fontSize: 14 }}>
+                    {trialDaysLeft > 0 ? `Free Trial — ${trialDaysLeft} day${trialDaysLeft !== 1 ? 's' : ''} left` : 'Free Trial Ended'}
+                  </Text>
+                  <Text style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
+                    {trialDaysLeft > 0
+                      ? `Subscribe before your trial ends to keep all your data and access.`
+                      : 'Subscribe now to restore full access to Nexora POS.'}
+                  </Text>
+                </View>
+              </View>
+            </Card.Content>
+          </Card>
+        )}
 
         {/* Features */}
         <Card style={styles.card}>

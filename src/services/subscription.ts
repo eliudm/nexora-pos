@@ -3,7 +3,10 @@ import axios from 'axios';
 import { SUBSCRIPTION_SERVER_URL } from '../config';
 
 const CACHE_KEY = 'nexora_sub_cache';
-const GRACE_DAYS = 7; // days to stay unlocked after server is unreachable
+const TRIAL_KEY = 'nexora_trial_start';
+const PAYWALL_DISMISSED_KEY = 'nexora_paywall_dismissed';
+const GRACE_DAYS = 7;
+export const TRIAL_DAYS = 14;
 
 export interface SubscriptionStatus {
   active: boolean;
@@ -83,6 +86,41 @@ export const subscriptionService = {
       { timeout: 15000 },
     );
     return res.data;
+  },
+
+  // ── Trial ──────────────────────────────────────────────────────────────────
+
+  async startTrial(): Promise<void> {
+    const existing = await SecureStore.getItemAsync(TRIAL_KEY);
+    if (!existing) {
+      await SecureStore.setItemAsync(TRIAL_KEY, new Date().toISOString());
+    }
+  },
+
+  async getTrialInfo(): Promise<{ startedAt: string | null; daysLeft: number; daysUsed: number; expired: boolean }> {
+    try {
+      const raw = await SecureStore.getItemAsync(TRIAL_KEY);
+      if (!raw) return { startedAt: null, daysLeft: TRIAL_DAYS, daysUsed: 0, expired: false };
+      const daysUsed = Math.floor((Date.now() - new Date(raw).getTime()) / 86_400_000);
+      const daysLeft = Math.max(0, TRIAL_DAYS - daysUsed);
+      return { startedAt: raw, daysLeft, daysUsed, expired: daysLeft === 0 };
+    } catch {
+      return { startedAt: null, daysLeft: TRIAL_DAYS, daysUsed: 0, expired: false };
+    }
+  },
+
+  async isPaywallDismissed(): Promise<boolean> {
+    try {
+      const raw = await SecureStore.getItemAsync(PAYWALL_DISMISSED_KEY);
+      if (!raw) return false;
+      return new Date(raw) > new Date();
+    } catch { return false; }
+  },
+
+  async dismissPaywall(): Promise<void> {
+    const until = new Date();
+    until.setHours(until.getHours() + 24);
+    await SecureStore.setItemAsync(PAYWALL_DISMISSED_KEY, until.toISOString());
   },
 
   // Polls every 3 s until subscription becomes active (max ~60 s).
