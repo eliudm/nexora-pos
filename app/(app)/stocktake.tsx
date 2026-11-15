@@ -6,11 +6,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { stocktakeQueries, StocktakeItem } from '../../src/db/stocktake';
 import { useSession } from '../../src/context/session';
-import { brand } from '../../src/theme';
+import { useTheme } from '../../src/context/theme';
 
 export default function StocktakeScreen() {
   const qc = useQueryClient();
   const { user } = useSession();
+  const { colors: C } = useTheme();
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [applyAdjustments, setApplyAdjustments] = useState(true);
   const [counts, setCounts] = useState<Record<number, string>>({});
@@ -51,6 +52,7 @@ export default function StocktakeScreen() {
   const countedItems = session?.items?.filter((i) => i.counted_qty !== null).length ?? 0;
   const totalItems = session?.items?.length ?? 0;
   const varianceItems = session?.items?.filter((i) => i.variance !== null && i.variance !== 0).length ?? 0;
+  const styles = makeStyles(C);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -173,30 +175,32 @@ export default function StocktakeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: brand.primary },
-  headerTitle: { color: '#fff', fontWeight: '700' },
-  noSession: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  noSessionText: { fontSize: 18, fontWeight: '700', color: '#555', marginTop: 16 },
-  noSessionSub: { fontSize: 13, color: '#888', textAlign: 'center', marginTop: 8, lineHeight: 20 },
-  startBtn: { marginTop: 24, backgroundColor: brand.primary },
-  progressBar: { backgroundColor: '#fff', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  progressStats: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 },
-  progressStat: { alignItems: 'center' },
-  progressNum: { fontSize: 20, fontWeight: '800', color: brand.primary },
-  progressLabel: { fontSize: 11, color: '#888', marginTop: 2 },
-  barBg: { height: 8, backgroundColor: '#f0f0f0', borderRadius: 4, overflow: 'hidden' },
-  barFill: { height: '100%', backgroundColor: brand.primary, borderRadius: 4 },
-  list: { padding: 8, paddingBottom: 20 },
-  itemRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 8, padding: 12, marginBottom: 6, elevation: 1 },
-  itemRowCounted: { borderLeftWidth: 3, borderLeftColor: brand.primary },
-  itemName: { fontSize: 13, fontWeight: '600', color: '#111' },
-  itemExpected: { fontSize: 11, color: '#888', marginTop: 2 },
-  countInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 8, width: 70, textAlign: 'center', fontSize: 16, fontWeight: '700', marginHorizontal: 8 },
-  varianceBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, minWidth: 44, alignItems: 'center' },
-  varianceText: { fontSize: 13, fontWeight: '700' },
-  applyRow: { flexDirection: 'row', gap: 8 },
-  applyChip: { flex: 1, backgroundColor: '#f0f0f0' },
-  applyChipActive: { flex: 1, backgroundColor: brand.primary },
-});
+function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: C.bg },
+    header: { backgroundColor: C.accent },
+    headerTitle: { color: '#fff', fontWeight: '700' },
+    noSession: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+    noSessionText: { fontSize: 18, fontWeight: '700', color: C.text, marginTop: 16 },
+    noSessionSub: { fontSize: 13, color: C.muted, textAlign: 'center', marginTop: 8, lineHeight: 20 },
+    startBtn: { marginTop: 24, backgroundColor: C.accent },
+    progressBar: { backgroundColor: C.surface, padding: 16, borderBottomWidth: 1, borderBottomColor: C.border },
+    progressStats: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 },
+    progressStat: { alignItems: 'center' },
+    progressNum: { fontSize: 20, fontWeight: '800', color: C.accent },
+    progressLabel: { fontSize: 11, color: C.muted, marginTop: 2 },
+    barBg: { height: 8, backgroundColor: C.elevated, borderRadius: 4, overflow: 'hidden' },
+    barFill: { height: '100%', backgroundColor: C.accent, borderRadius: 4 },
+    list: { padding: 8, paddingBottom: 20 },
+    itemRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, borderRadius: 8, padding: 12, marginBottom: 6, elevation: 1 },
+    itemRowCounted: { borderLeftWidth: 3, borderLeftColor: C.accent },
+    itemName: { fontSize: 13, fontWeight: '600', color: C.text },
+    itemExpected: { fontSize: 11, color: C.muted, marginTop: 2 },
+    countInput: { borderWidth: 1, borderColor: C.border, borderRadius: 8, padding: 8, width: 70, textAlign: 'center', fontSize: 16, fontWeight: '700', marginHorizontal: 8 },
+    varianceBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, minWidth: 44, alignItems: 'center' },
+    varianceText: { fontSize: 13, fontWeight: '700' },
+    applyRow: { flexDirection: 'row', gap: 8 },
+    applyChip: { flex: 1, backgroundColor: C.elevated },
+    applyChipActive: { flex: 1, backgroundColor: C.accent },
+  });
+}

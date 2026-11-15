@@ -10,7 +10,7 @@ import { productQueries, Product, Category } from '../../src/db/products';
 import { wastageQueries, WASTAGE_REASONS } from '../../src/db/wastage';
 import { variantQueries, ProductVariant } from '../../src/db/variants';
 import { useSession } from '../../src/context/session';
-import { brand } from '../../src/theme';
+import { useTheme } from '../../src/context/theme';
 
 type DialogMode = 'product' | 'category' | 'barcode' | 'wastage' | 'variants' | null;
 
@@ -25,12 +25,13 @@ const PRESET_COLORS = ['#1db8a0', '#6f67ff', '#f59e0b', '#e53935', '#22c55e', '#
 export default function ProductsScreen() {
   const qc = useQueryClient();
   const { user } = useSession();
+  const { colors: C } = useTheme();
   const [search, setSearch] = useState('');
   const [dialog, setDialog] = useState<DialogMode>(null);
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState({ ...EMPTY_PRODUCT });
   const [catName, setCatName] = useState('');
-  const [catColor, setCatColor] = useState(brand.primary);
+  const [catColor, setCatColor] = useState(C.accent);
   const [menuId, setMenuId] = useState<number | null>(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [lastScan, setLastScan] = useState('');
@@ -141,7 +142,7 @@ export default function ProductsScreen() {
     setDialog('variants');
   };
 
-  const closeDialog = () => { setDialog(null); setEditing(null); setForm({ ...EMPTY_PRODUCT }); setCatName(''); setCatColor(brand.primary); };
+  const closeDialog = () => { setDialog(null); setEditing(null); setForm({ ...EMPTY_PRODUCT }); setCatName(''); setCatColor(C.accent); };
 
   const openEdit = (p: Product) => {
     setEditing(p);
@@ -187,6 +188,7 @@ export default function ProductsScreen() {
     const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.5 });
     if (!result.canceled) setForm((f) => ({ ...f, image_uri: result.assets[0].uri }));
   };
+  const styles = makeStyles(C);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -293,13 +295,13 @@ export default function ProductsScreen() {
                   <View style={[styles.input, { flex: 1, flexDirection: 'row', alignItems: 'center' }]}>
                     <TextInput label="Barcode" value={form.barcode} onChangeText={(v) => setForm((f) => ({ ...f, barcode: v }))} mode="outlined" style={{ flex: 1 }} />
                     <Pressable onPress={openBarcodeScanner} style={styles.scanBtn}>
-                      <MaterialCommunityIcons name="barcode-scan" size={22} color={brand.primary} />
+                      <MaterialCommunityIcons name="barcode-scan" size={22} color={C.accent} />
                     </Pressable>
                   </View>
                 </View>
                 <View style={styles.switchRow}>
                   <Text>Track Stock</Text>
-                  <Switch value={form.track_stock} onValueChange={(v) => setForm((f) => ({ ...f, track_stock: v }))} color={brand.primary} />
+                  <Switch value={form.track_stock} onValueChange={(v) => setForm((f) => ({ ...f, track_stock: v }))} color={C.accent} />
                 </View>
                 {form.track_stock && (
                   <>
@@ -421,36 +423,38 @@ export default function ProductsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: brand.primary },
-  headerTitle: { color: '#fff', fontWeight: '700' },
-  searchbar: { margin: 12, elevation: 0, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e0e0e0' },
-  list: { paddingHorizontal: 12, paddingBottom: 80 },
-  productCard: { marginBottom: 8, borderRadius: 10 },
-  productContent: { flexDirection: 'row', alignItems: 'center' },
-  productImage: { width: 48, height: 48, borderRadius: 8 },
-  productImagePlaceholder: { width: 48, height: 48, borderRadius: 8, backgroundColor: '#f5f5f5', alignItems: 'center', justifyContent: 'center' },
-  productName: { fontSize: 14, fontWeight: '700', color: '#111' },
-  productSub: { fontSize: 12, color: '#888', marginTop: 2 },
-  barcode: { fontSize: 10, color: '#aaa', marginTop: 1, fontFamily: 'monospace' },
-  stockChip: { alignSelf: 'flex-start', marginTop: 4 },
-  lowChip: { backgroundColor: '#fce4e4' },
-  priceCol: { alignItems: 'flex-end', marginRight: 4 },
-  price: { fontSize: 15, fontWeight: '700', color: brand.primary },
-  vatLabel: { fontSize: 11, color: '#888', marginTop: 2 },
-  fab: { position: 'absolute', right: 20, bottom: 20, backgroundColor: brand.primary },
-  input: { marginBottom: 10, backgroundColor: '#fff' },
-  row: { flexDirection: 'row' },
-  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingHorizontal: 4 },
-  sectionLabel: { fontSize: 12, color: '#666', marginBottom: 6, marginTop: 4 },
-  catRow: { flexDirection: 'row', flexWrap: 'wrap' },
-  imageRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  imagePreview: { width: 72, height: 72, borderRadius: 8 },
-  imagePlaceholder: { width: 72, height: 72, borderRadius: 8, backgroundColor: '#f5f5f5', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e0e0e0' },
-  imageButtons: { flex: 1, marginLeft: 12 },
-  scanBtn: { padding: 8 },
-  colorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  colorSwatch: { width: 36, height: 36, borderRadius: 18 },
-  colorSelected: { borderWidth: 3, borderColor: '#333' },
-});
+function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: C.bg },
+    header: { backgroundColor: C.accent },
+    headerTitle: { color: '#fff', fontWeight: '700' },
+    searchbar: { margin: 12, elevation: 0, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+    list: { paddingHorizontal: 12, paddingBottom: 80 },
+    productCard: { marginBottom: 8, borderRadius: 10 },
+    productContent: { flexDirection: 'row', alignItems: 'center' },
+    productImage: { width: 48, height: 48, borderRadius: 8 },
+    productImagePlaceholder: { width: 48, height: 48, borderRadius: 8, backgroundColor: C.elevated, alignItems: 'center', justifyContent: 'center' },
+    productName: { fontSize: 14, fontWeight: '700', color: C.text },
+    productSub: { fontSize: 12, color: C.muted, marginTop: 2 },
+    barcode: { fontSize: 10, color: C.muted, marginTop: 1, fontFamily: 'monospace' },
+    stockChip: { alignSelf: 'flex-start', marginTop: 4 },
+    lowChip: { backgroundColor: '#fce4e4' },
+    priceCol: { alignItems: 'flex-end', marginRight: 4 },
+    price: { fontSize: 15, fontWeight: '700', color: C.accent },
+    vatLabel: { fontSize: 11, color: C.muted, marginTop: 2 },
+    fab: { position: 'absolute', right: 20, bottom: 20, backgroundColor: C.accent },
+    input: { marginBottom: 10 },
+    row: { flexDirection: 'row' },
+    switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingHorizontal: 4 },
+    sectionLabel: { fontSize: 12, color: C.muted, marginBottom: 6, marginTop: 4 },
+    catRow: { flexDirection: 'row', flexWrap: 'wrap' },
+    imageRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+    imagePreview: { width: 72, height: 72, borderRadius: 8 },
+    imagePlaceholder: { width: 72, height: 72, borderRadius: 8, backgroundColor: C.elevated, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.border },
+    imageButtons: { flex: 1, marginLeft: 12 },
+    scanBtn: { padding: 8 },
+    colorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    colorSwatch: { width: 36, height: 36, borderRadius: 18 },
+    colorSelected: { borderWidth: 3, borderColor: C.text },
+  });
+}

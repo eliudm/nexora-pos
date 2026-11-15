@@ -15,10 +15,11 @@ import { stockLogQueries } from '../../src/db/stock_log';
 import { cashDrawerQueries } from '../../src/db/cash_drawer';
 import { darajaService, DarajaConfig } from '../../src/services/mpesa_daraja';
 import { useSession } from '../../src/context/session';
-import { brand } from '../../src/theme';
+import { useTheme } from '../../src/context/theme';
 import dayjs from 'dayjs';
 
 function EtimsFields() {
+  const { colors: C } = useTheme();
   const [serial, setSerial] = useState('');
   const [bhfId, setBhfId] = useState('00');
   const [serverUrl, setServerUrl] = useState('https://etims-api.kra.go.ke');
@@ -50,13 +51,13 @@ function EtimsFields() {
   if (!loaded) return null;
   return (
     <>
-      <Text style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
+      <Text style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>
         Sales are automatically submitted to KRA eTIMS after each transaction if configured.
         Your VAT/PIN number (above) is used as the TIN.
       </Text>
-      <TextInput label="Device Serial Number" value={serial} onChangeText={setSerial} mode="outlined" style={{ marginBottom: 10, backgroundColor: '#fff' }} />
-      <TextInput label="Branch ID (BhfId)" value={bhfId} onChangeText={setBhfId} mode="outlined" style={{ marginBottom: 10, backgroundColor: '#fff' }} />
-      <TextInput label="eTIMS Server URL" value={serverUrl} onChangeText={setServerUrl} mode="outlined" style={{ marginBottom: 10, backgroundColor: '#fff' }} />
+      <TextInput label="Device Serial Number" value={serial} onChangeText={setSerial} mode="outlined" style={{ marginBottom: 10 }} />
+      <TextInput label="Branch ID (BhfId)" value={bhfId} onChangeText={setBhfId} mode="outlined" style={{ marginBottom: 10 }} />
+      <TextInput label="eTIMS Server URL" value={serverUrl} onChangeText={setServerUrl} mode="outlined" style={{ marginBottom: 10 }} />
       <Button mode="outlined" onPress={handleSave} loading={saving} compact>Save eTIMS Config</Button>
     </>
   );
@@ -65,6 +66,7 @@ function EtimsFields() {
 export default function SettingsScreen() {
   const qc = useQueryClient();
   const { user, setUser } = useSession();
+  const { mode, colors: C, toggleTheme } = useTheme();
   const [bizName, setBizName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
@@ -309,6 +311,7 @@ export default function SettingsScreen() {
   ]);
 
   const fmt = (n: number) => `KES ${(n || 0).toLocaleString('en-KE', { maximumFractionDigits: 0 })}`;
+  const styles = makeStyles(C);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -319,6 +322,24 @@ export default function SettingsScreen() {
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+
+          {/* Appearance */}
+          <Text style={styles.section}>Appearance</Text>
+          <Card style={styles.card}>
+            <List.Item
+              title="Theme"
+              description={mode === 'dark' ? 'Dark mode' : 'Light mode'}
+              left={(p) => <List.Icon {...p} icon={mode === 'dark' ? 'weather-night' : 'weather-sunny'} color={C.accent} />}
+              right={() => (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ fontSize: 13, color: C.muted }}>Light</Text>
+                  <List.Icon icon={mode === 'dark' ? 'toggle-switch' : 'toggle-switch-off'} color={C.accent} />
+                  <Text style={{ fontSize: 13, color: C.muted }}>Dark</Text>
+                </View>
+              )}
+              onPress={toggleTheme}
+            />
+          </Card>
 
           {/* Shift Management */}
           <Text style={styles.section}>Shift Management</Text>
@@ -347,7 +368,7 @@ export default function SettingsScreen() {
               />
             )}
             <Divider />
-            <List.Item title="Shift History" left={(p) => <List.Icon {...p} icon="history" color={brand.primary} />} onPress={() => setShiftHistoryOpen(true)} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
+            <List.Item title="Shift History" left={(p) => <List.Icon {...p} icon="history" color={C.accent} />} onPress={() => setShiftHistoryOpen(true)} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
           </Card>
 
           {/* Printer Setup */}
@@ -361,7 +382,7 @@ export default function SettingsScreen() {
           {/* Stock Log */}
           <Text style={styles.section}>Inventory Audit</Text>
           <Card style={styles.card}>
-            <List.Item title="Stock Movement Log" description="View all stock additions and deductions" left={(p) => <List.Icon {...p} icon="package-variant" color={brand.primary} />} onPress={() => setStockLogOpen(true)} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
+            <List.Item title="Stock Movement Log" description="View all stock additions and deductions" left={(p) => <List.Icon {...p} icon="package-variant" color={C.accent} />} onPress={() => setStockLogOpen(true)} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
           </Card>
 
           {/* Cash Drawer */}
@@ -378,7 +399,7 @@ export default function SettingsScreen() {
               </View>
             </Card.Content>
             <Divider />
-            <List.Item title="Drawer Log" description="View all cash movements" left={(p) => <List.Icon {...p} icon="cash" color={brand.primary} />} onPress={() => setDrawerLogOpen(true)} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
+            <List.Item title="Drawer Log" description="View all cash movements" left={(p) => <List.Icon {...p} icon="cash" color={C.accent} />} onPress={() => setDrawerLogOpen(true)} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
           </Card>
 
           {/* Business Details */}
@@ -400,7 +421,7 @@ export default function SettingsScreen() {
               <TextInput label="Paybill Number" value={paybill} onChangeText={setPaybill} mode="outlined" keyboardType="numeric" style={styles.input} />
               <TextInput label="Till Number" value={till} onChangeText={setTill} mode="outlined" keyboardType="numeric" style={styles.input} />
               <Text style={styles.subSection}>Daraja API (STK Push)</Text>
-              <Text style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>Required for triggering real M-Pesa payment prompts. Get credentials from developer.safaricom.co.ke</Text>
+              <Text style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Required for triggering real M-Pesa payment prompts. Get credentials from developer.safaricom.co.ke</Text>
               <TextInput label="Consumer Key" value={darajaKey} onChangeText={setDarajaKey} mode="outlined" style={styles.input} autoCapitalize="none" />
               <TextInput label="Consumer Secret" value={darajaSecret} onChangeText={setDarajaSecret} mode="outlined" style={styles.input} autoCapitalize="none" secureTextEntry />
               <TextInput label="Business Short Code" value={darajaShortCode} onChangeText={setDarajaShortCode} mode="outlined" keyboardType="numeric" style={styles.input} />
@@ -432,14 +453,14 @@ export default function SettingsScreen() {
           <Card style={styles.card}>
             <Card.Content>
               <Text style={styles.subSection}>WhatsApp Receipts</Text>
-              <Text style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>When enabled, a WhatsApp share button appears on the POS checkout screen.</Text>
+              <Text style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>When enabled, a WhatsApp share button appears on the POS checkout screen.</Text>
               <View style={styles.envRow}>
                 <Button mode={waEnabled ? 'contained' : 'outlined'} onPress={() => setWaEnabled(true)} compact style={{ flex: 1, backgroundColor: waEnabled ? '#25D366' : undefined }}>Enabled</Button>
                 <Button mode={!waEnabled ? 'contained' : 'outlined'} onPress={() => setWaEnabled(false)} compact style={{ flex: 1 }}>Disabled</Button>
               </View>
 
               <Text style={[styles.subSection, { marginTop: 16 }]}>Africa's Talking — SMS</Text>
-              <Text style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>Send SMS receipts via Africa's Talking. Register at africastalking.com</Text>
+              <Text style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Send SMS receipts via Africa's Talking. Register at africastalking.com</Text>
               <TextInput label="API Key" value={atsApiKey} onChangeText={setAtsApiKey} mode="outlined" style={styles.input} autoCapitalize="none" secureTextEntry />
               <TextInput label="Sender ID (shortcode)" value={atsSenderId} onChangeText={setAtsSenderId} mode="outlined" style={styles.input} />
               <Button mode="outlined" onPress={handleSaveIntegrations} loading={savingIntegrations} style={{ marginTop: 4 }}>Save Integration Settings</Button>
@@ -468,7 +489,7 @@ export default function SettingsScreen() {
           {/* Backup & Restore */}
           <Text style={styles.section}>Data Management</Text>
           <Card style={styles.card}>
-            <List.Item title="Backup Database" description="Export database file to share or save" left={(p) => <List.Icon {...p} icon="database-export" color={brand.primary} />} onPress={handleBackup} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
+            <List.Item title="Backup Database" description="Export database file to share or save" left={(p) => <List.Icon {...p} icon="database-export" color={C.accent} />} onPress={handleBackup} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
             <Divider />
             <List.Item title="Restore Database" description="Import a previously exported backup" left={(p) => <List.Icon {...p} icon="database-import" color="#f59e0b" />} onPress={handleRestore} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
           </Card>
@@ -477,20 +498,20 @@ export default function SettingsScreen() {
 
           <Text style={styles.section}>Help & Support</Text>
           <Card style={styles.card}>
-            <List.Item title="Help Centre" description="FAQs, guides, and troubleshooting" left={(p) => <List.Icon {...p} icon="help-circle" color={brand.primary} />} onPress={() => router.push('/(app)/help')} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
+            <List.Item title="Help Centre" description="FAQs, guides, and troubleshooting" left={(p) => <List.Icon {...p} icon="help-circle" color={C.accent} />} onPress={() => router.push('/(app)/help')} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
             <Divider />
             <List.Item title="WhatsApp Support" description="Chat with our support team" left={(p) => <List.Icon {...p} icon="whatsapp" color="#25D366" />} onPress={() => Linking.openURL('https://wa.me/254700000000?text=Hi%2C%20I%20need%20help%20with%20Nexora%20POS')} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
             <Divider />
-            <List.Item title="Email Support" description="support@nexorapos.com" left={(p) => <List.Icon {...p} icon="email" color={brand.primary} />} onPress={() => Linking.openURL('mailto:support@nexorapos.com')} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
+            <List.Item title="Email Support" description="support@nexorapos.com" left={(p) => <List.Icon {...p} icon="email" color={C.accent} />} onPress={() => Linking.openURL('mailto:support@nexorapos.com')} right={(p) => <List.Icon {...p} icon="chevron-right" />} />
           </Card>
 
           <Divider style={{ marginVertical: 24 }} />
 
           <Text style={styles.section}>About</Text>
           <Card style={styles.card}>
-            <List.Item title="Nexora POS" description="Version 1.0.0 — Standalone Android POS" left={(p) => <List.Icon {...p} icon="cash-register" color={brand.primary} />} />
+            <List.Item title="Nexora POS" description="Version 1.0.0 — Standalone Android POS" left={(p) => <List.Icon {...p} icon="cash-register" color={C.accent} />} />
             <Divider />
-            <List.Item title="Subscription" description="KES 600/month via Google Play" left={(p) => <List.Icon {...p} icon="google-play" color={brand.primary} />} />
+            <List.Item title="Subscription" description="KES 600/month via Google Play" left={(p) => <List.Icon {...p} icon="google-play" color={C.accent} />} />
           </Card>
 
           <View style={{ height: 40 }} />
@@ -502,7 +523,7 @@ export default function SettingsScreen() {
         <Dialog visible={shiftDialogOpen} onDismiss={() => setShiftDialogOpen(false)}>
           <Dialog.Title>Open Shift</Dialog.Title>
           <Dialog.Content>
-            <Text style={{ marginBottom: 12, color: '#555' }}>Cashier: {user?.name}</Text>
+            <Text style={{ marginBottom: 12, color: C.muted }}>Cashier: {user?.name}</Text>
             <TextInput label="Opening Cash (KES)" value={openingCash} onChangeText={setOpeningCash} mode="outlined" keyboardType="numeric" />
           </Dialog.Content>
           <Dialog.Actions>
@@ -568,7 +589,7 @@ export default function SettingsScreen() {
                   </View>
                 </View>
               ))}
-              {(drawerLog ?? []).length === 0 && <Text style={{ color: '#aaa', textAlign: 'center', padding: 20 }}>No drawer movements yet.</Text>}
+              {(drawerLog ?? []).length === 0 && <Text style={{ color: C.muted, textAlign: 'center', padding: 20 }}>No drawer movements yet.</Text>}
             </ScrollView>
           </Dialog.Content>
           <Dialog.Actions><Button onPress={() => setDrawerLogOpen(false)}>Close</Button></Dialog.Actions>
@@ -594,7 +615,7 @@ export default function SettingsScreen() {
                   </View>
                 </View>
               ))}
-              {(stockLog ?? []).length === 0 && <Text style={{ color: '#aaa', textAlign: 'center', padding: 20 }}>No stock movements yet.</Text>}
+              {(stockLog ?? []).length === 0 && <Text style={{ color: C.muted, textAlign: 'center', padding: 20 }}>No stock movements yet.</Text>}
             </ScrollView>
           </Dialog.Content>
           <Dialog.Actions><Button onPress={() => setStockLogOpen(false)}>Close</Button></Dialog.Actions>
@@ -604,32 +625,34 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: brand.primary },
-  headerTitle: { color: '#fff', fontWeight: '700' },
-  scroll: { padding: 16, paddingBottom: 48 },
-  section: { fontSize: 12, fontWeight: '700', color: brand.primary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, marginTop: 4 },
-  card: { borderRadius: 12, marginBottom: 8 },
-  input: { marginBottom: 10, backgroundColor: '#fff' },
-  saveBtn: { borderRadius: 10, backgroundColor: brand.primary, marginTop: 8 },
-  roleRow: { flexDirection: 'row', gap: 8 },
-  roleBtn: { flex: 1 },
-  shiftRow: { flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  shiftCashier: { fontSize: 14, fontWeight: '700', color: '#111' },
-  shiftTime: { fontSize: 11, color: '#888', marginTop: 2 },
-  shiftRev: { fontSize: 14, fontWeight: '700', color: brand.primary },
-  shiftSales: { fontSize: 11, color: '#888', marginTop: 2 },
-  logRow: { flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  logProduct: { fontSize: 13, fontWeight: '600', color: '#111' },
-  logReason: { fontSize: 11, color: '#666', marginTop: 1 },
-  logTime: { fontSize: 10, color: '#aaa', marginTop: 1 },
-  logQty: { fontSize: 15, fontWeight: '800' },
-  logBalance: { fontSize: 10, color: '#888', marginTop: 2 },
-  drawerBalance: { alignItems: 'center', paddingVertical: 12 },
-  drawerLabel: { fontSize: 12, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 },
-  drawerAmt: { fontSize: 28, fontWeight: '800', color: brand.primary, marginTop: 4 },
-  drawerBtns: { flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 4 },
-  subSection: { fontSize: 12, fontWeight: '700', color: '#555', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 4 },
-  envRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
-});
+function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: C.bg },
+    header: { backgroundColor: C.accent },
+    headerTitle: { color: '#fff', fontWeight: '700' },
+    scroll: { padding: 16, paddingBottom: 48 },
+    section: { fontSize: 12, fontWeight: '700', color: C.accent, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, marginTop: 4 },
+    card: { borderRadius: 12, marginBottom: 8 },
+    input: { marginBottom: 10 },
+    saveBtn: { borderRadius: 10, backgroundColor: C.accent, marginTop: 8 },
+    roleRow: { flexDirection: 'row', gap: 8 },
+    roleBtn: { flex: 1 },
+    shiftRow: { flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border },
+    shiftCashier: { fontSize: 14, fontWeight: '700', color: C.text },
+    shiftTime: { fontSize: 11, color: C.muted, marginTop: 2 },
+    shiftRev: { fontSize: 14, fontWeight: '700', color: C.accent },
+    shiftSales: { fontSize: 11, color: C.muted, marginTop: 2 },
+    logRow: { flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border },
+    logProduct: { fontSize: 13, fontWeight: '600', color: C.text },
+    logReason: { fontSize: 11, color: C.muted, marginTop: 1 },
+    logTime: { fontSize: 10, color: C.muted, marginTop: 1 },
+    logQty: { fontSize: 15, fontWeight: '800' },
+    logBalance: { fontSize: 10, color: C.muted, marginTop: 2 },
+    drawerBalance: { alignItems: 'center', paddingVertical: 12 },
+    drawerLabel: { fontSize: 12, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
+    drawerAmt: { fontSize: 28, fontWeight: '800', color: C.accent, marginTop: 4 },
+    drawerBtns: { flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 4 },
+    subSection: { fontSize: 12, fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 4 },
+    envRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  });
+}

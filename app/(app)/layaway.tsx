@@ -8,7 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { layawayQueries, Layaway, LayawayPayment } from '../../src/db/layaway';
 import { customerQueries, Customer } from '../../src/db/customers';
 import { useSession } from '../../src/context/session';
-import { brand } from '../../src/theme';
+import { useTheme } from '../../src/context/theme';
 import dayjs from 'dayjs';
 
 const STATUS_COLOR: Record<string, string> = {
@@ -22,6 +22,7 @@ const PAY_METHODS = ['CASH', 'MPESA', 'BANK'] as const;
 export default function LayawayScreen() {
   const qc = useQueryClient();
   const { user } = useSession();
+  const { colors: C } = useTheme();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [detailLayaway, setDetailLayaway] = useState<Layaway | null>(null);
@@ -121,6 +122,7 @@ export default function LayawayScreen() {
   };
 
   const fmt = (n: number) => `KES ${n.toLocaleString('en-KE', { maximumFractionDigits: 0 })}`;
+  const styles = makeStyles(C);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -290,21 +292,23 @@ export default function LayawayScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: brand.primary },
-  headerTitle: { color: '#fff', fontWeight: '700' },
-  card: { borderRadius: 12 },
-  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 10 },
-  layNo: { fontSize: 13, fontWeight: '700', color: '#111' },
-  customer: { fontSize: 12, color: brand.primary, marginTop: 2 },
-  desc: { fontSize: 12, color: '#666', marginTop: 2 },
-  amtRow: { flexDirection: 'row', marginTop: 4 },
-  amtLabel: { fontSize: 10, color: '#888', textTransform: 'uppercase' },
-  amtVal: { fontSize: 15, fontWeight: '800', color: '#111', marginTop: 2 },
-  date: { fontSize: 10, color: '#aaa', marginTop: 8 },
-  input: { marginBottom: 10, backgroundColor: '#fff' },
-  pmLabel: { fontSize: 12, fontWeight: '600', color: '#555', marginTop: 4, marginBottom: 6 },
-  pmRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 },
-  payRow: { flexDirection: 'row', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-});
+function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: C.bg },
+    header: { backgroundColor: C.accent },
+    headerTitle: { color: '#fff', fontWeight: '700' },
+    card: { borderRadius: 12 },
+    cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 10 },
+    layNo: { fontSize: 13, fontWeight: '700', color: C.text },
+    customer: { fontSize: 12, color: C.accent, marginTop: 2 },
+    desc: { fontSize: 12, color: C.muted, marginTop: 2 },
+    amtRow: { flexDirection: 'row', marginTop: 4 },
+    amtLabel: { fontSize: 10, color: C.muted, textTransform: 'uppercase' },
+    amtVal: { fontSize: 15, fontWeight: '800', color: C.text, marginTop: 2 },
+    date: { fontSize: 10, color: C.muted, marginTop: 8 },
+    input: { marginBottom: 10 },
+    pmLabel: { fontSize: 12, fontWeight: '600', color: C.muted, marginTop: 4, marginBottom: 6 },
+    pmRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 },
+    payRow: { flexDirection: 'row', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: C.border },
+  });
+}

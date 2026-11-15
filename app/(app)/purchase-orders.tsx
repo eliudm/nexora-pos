@@ -8,7 +8,7 @@ import { poQueries, POItem, PurchaseOrder } from '../../src/db/purchase_orders';
 import { supplierQueries, Supplier } from '../../src/db/suppliers';
 import { productQueries, Product } from '../../src/db/products';
 import { useSession } from '../../src/context/session';
-import { brand } from '../../src/theme';
+import { useTheme } from '../../src/context/theme';
 import dayjs from 'dayjs';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -18,6 +18,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function PurchaseOrdersScreen() {
   const qc = useQueryClient();
   const { user } = useSession();
+  const { colors: C } = useTheme();
   const [createVisible, setCreateVisible] = useState(false);
   const [detailPo, setDetailPo] = useState<PurchaseOrder | null>(null);
   const [supplier, setSupplier] = useState<Supplier | null>(null);
@@ -110,6 +111,7 @@ export default function PurchaseOrdersScreen() {
     const full = await poQueries.getById(po.id);
     setDetailPo(full);
   };
+  const styles = makeStyles(C);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -304,31 +306,33 @@ export default function PurchaseOrdersScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: brand.primary },
-  headerTitle: { color: '#fff', fontWeight: '700' },
-  list: { padding: 12, gap: 8, paddingBottom: 80 },
-  card: { borderRadius: 10 },
-  poRow: { flexDirection: 'row', alignItems: 'center' },
-  poNo: { fontSize: 14, fontWeight: '700', color: '#111' },
-  poSupplier: { fontSize: 12, color: '#666', marginTop: 2 },
-  poDate: { fontSize: 11, color: '#aaa', marginTop: 2 },
-  poAmount: { fontSize: 14, fontWeight: '700', color: brand.primary },
-  empty: { alignItems: 'center', paddingTop: 60 },
-  emptyText: { color: '#ccc', marginTop: 8, fontSize: 14 },
-  fab: { position: 'absolute', bottom: 24, right: 24, backgroundColor: brand.primary },
-  dialog: { marginHorizontal: 8 },
-  supplierBtn: { marginBottom: 10 },
-  input: { marginBottom: 10, backgroundColor: '#fff' },
-  sectionLabel: { fontSize: 13, fontWeight: '700', color: '#555', marginBottom: 8 },
-  poItemRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-  poItemInput: { backgroundColor: '#fff', flex: 0 },
-  poTotal: { fontSize: 14, fontWeight: '700', color: brand.primary, textAlign: 'right', marginTop: 10 },
-  detailMeta: { fontSize: 13, color: '#555', marginBottom: 4 },
-  detailItemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  detailItemQty: { fontSize: 12, color: '#888', width: 50, textAlign: 'center' },
-  detailItemCost: { fontSize: 12, color: '#333', width: 70, textAlign: 'right' },
-  receiveRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  receiveExpected: { fontSize: 11, color: '#888', width: 60 },
-});
+function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: C.bg },
+    header: { backgroundColor: C.accent },
+    headerTitle: { color: '#fff', fontWeight: '700' },
+    list: { padding: 12, gap: 8, paddingBottom: 80 },
+    card: { borderRadius: 10 },
+    poRow: { flexDirection: 'row', alignItems: 'center' },
+    poNo: { fontSize: 14, fontWeight: '700', color: C.text },
+    poSupplier: { fontSize: 12, color: C.muted, marginTop: 2 },
+    poDate: { fontSize: 11, color: C.muted, marginTop: 2 },
+    poAmount: { fontSize: 14, fontWeight: '700', color: C.accent },
+    empty: { alignItems: 'center', paddingTop: 60 },
+    emptyText: { color: C.muted, marginTop: 8, fontSize: 14 },
+    fab: { position: 'absolute', bottom: 24, right: 24, backgroundColor: C.accent },
+    dialog: { marginHorizontal: 8 },
+    supplierBtn: { marginBottom: 10 },
+    input: { marginBottom: 10 },
+    sectionLabel: { fontSize: 13, fontWeight: '700', color: C.muted, marginBottom: 8 },
+    poItemRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+    poItemInput: { flex: 0 },
+    poTotal: { fontSize: 14, fontWeight: '700', color: C.accent, textAlign: 'right', marginTop: 10 },
+    detailMeta: { fontSize: 13, color: C.muted, marginBottom: 4 },
+    detailItemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border },
+    detailItemQty: { fontSize: 12, color: C.muted, width: 50, textAlign: 'center' },
+    detailItemCost: { fontSize: 12, color: C.text, width: 70, textAlign: 'right' },
+    receiveRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+    receiveExpected: { fontSize: 11, color: C.muted, width: 60 },
+  });
+}

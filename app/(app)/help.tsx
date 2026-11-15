@@ -4,7 +4,7 @@ import { Text, Appbar, Searchbar, Card, Chip, Divider, Button, List } from 'reac
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { brand } from '../../src/theme';
+import { useTheme } from '../../src/context/theme';
 
 // ─── Help content ─────────────────────────────────────────────────────────────
 
@@ -69,7 +69,7 @@ const SECTIONS: Section[] = [
   {
     key: 'pos',
     icon: 'cash-register',
-    color: brand.primary,
+    color: '#1db8a0',
     title: 'Point of Sale',
     faqs: [
       {
@@ -559,6 +559,7 @@ const SECTIONS: Section[] = [
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function HelpScreen() {
+  const { colors: C } = useTheme();
   const [search, setSearch] = useState('');
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [openFaq, setOpenFaq] = useState<string | null>(null);
@@ -585,6 +586,7 @@ export default function HelpScreen() {
   const openEmail = () => {
     Linking.openURL('mailto:support@nexorapos.com?subject=Nexora%20POS%20Support');
   };
+  const styles = makeStyles(C);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -734,36 +736,38 @@ export default function HelpScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: brand.primary },
-  headerTitle: { color: '#fff', fontWeight: '700' },
-  scroll: { padding: 16, paddingBottom: 40 },
-  searchbar: { marginBottom: 16, borderRadius: 12, elevation: 0, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e0e0e0' },
-  supportCard: { borderRadius: 14, marginBottom: 16, backgroundColor: brand.primary },
-  supportTitle: { fontSize: 16, fontWeight: '800', color: '#fff', marginBottom: 4 },
-  supportSub: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginBottom: 12 },
-  supportBtns: { flexDirection: 'row', gap: 10 },
-  supportBtn: { flex: 1, borderRadius: 8, borderColor: 'rgba(255,255,255,0.5)' },
-  sectionHeader: { fontSize: 12, fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, marginTop: 4 },
-  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
-  quickCard: { width: '47%', backgroundColor: '#fff', borderRadius: 12, padding: 12, elevation: 1 },
-  quickIcon: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  quickLabel: { fontSize: 13, fontWeight: '700', color: '#111', lineHeight: 17 },
-  quickCount: { fontSize: 11, color: '#aaa', marginTop: 3 },
-  card: { borderRadius: 12, marginBottom: 10, overflow: 'hidden' },
-  sectionRow: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 },
-  sectionIcon: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  sectionTitle: { flex: 1, fontSize: 14, fontWeight: '700', color: '#111' },
-  sectionCount: { fontSize: 12, color: '#aaa', marginRight: 4 },
-  faqRow: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 },
-  faqQ: { flex: 1, fontSize: 13, fontWeight: '600', color: '#222', lineHeight: 18 },
-  faqABox: { backgroundColor: '#f9f9f9', paddingHorizontal: 14, paddingBottom: 14 },
-  faqA: { fontSize: 13, color: '#555', lineHeight: 20 },
-  noResults: { alignItems: 'center', paddingVertical: 40 },
-  noResultsText: { fontSize: 15, fontWeight: '600', color: '#bbb', marginTop: 12 },
-  noResultsSub: { fontSize: 12, color: '#ccc', marginTop: 4 },
-  versionRow: { alignItems: 'center', marginTop: 24 },
-  versionText: { fontSize: 12, color: '#aaa' },
-  versionSub: { fontSize: 11, color: '#ccc', marginTop: 2 },
-});
+function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: C.bg },
+    header: { backgroundColor: C.accent },
+    headerTitle: { color: '#fff', fontWeight: '700' },
+    scroll: { padding: 16, paddingBottom: 40 },
+    searchbar: { marginBottom: 16, borderRadius: 12, elevation: 0, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+    supportCard: { borderRadius: 14, marginBottom: 16, backgroundColor: C.accent },
+    supportTitle: { fontSize: 16, fontWeight: '800', color: '#fff', marginBottom: 4 },
+    supportSub: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginBottom: 12 },
+    supportBtns: { flexDirection: 'row', gap: 10 },
+    supportBtn: { flex: 1, borderRadius: 8, borderColor: 'rgba(255,255,255,0.5)' },
+    sectionHeader: { fontSize: 12, fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, marginTop: 4 },
+    quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
+    quickCard: { width: '47%', backgroundColor: C.surface, borderRadius: 12, padding: 12, elevation: 1 },
+    quickIcon: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+    quickLabel: { fontSize: 13, fontWeight: '700', color: C.text, lineHeight: 17 },
+    quickCount: { fontSize: 11, color: C.muted, marginTop: 3 },
+    card: { borderRadius: 12, marginBottom: 10, overflow: 'hidden' },
+    sectionRow: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 },
+    sectionIcon: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+    sectionTitle: { flex: 1, fontSize: 14, fontWeight: '700', color: C.text },
+    sectionCount: { fontSize: 12, color: C.muted, marginRight: 4 },
+    faqRow: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 },
+    faqQ: { flex: 1, fontSize: 13, fontWeight: '600', color: C.text, lineHeight: 18 },
+    faqABox: { backgroundColor: C.elevated, paddingHorizontal: 14, paddingBottom: 14 },
+    faqA: { fontSize: 13, color: C.muted, lineHeight: 20 },
+    noResults: { alignItems: 'center', paddingVertical: 40 },
+    noResultsText: { fontSize: 15, fontWeight: '600', color: C.muted, marginTop: 12 },
+    noResultsSub: { fontSize: 12, color: C.muted, marginTop: 4 },
+    versionRow: { alignItems: 'center', marginTop: 24 },
+    versionText: { fontSize: 12, color: C.muted },
+    versionSub: { fontSize: 11, color: C.muted, marginTop: 2 },
+  });
+}

@@ -7,7 +7,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { customerQueries, Customer } from '../../src/db/customers';
 import { salesQueries, Sale } from '../../src/db/sales';
 import { loyaltyQueries, LoyaltyTransaction } from '../../src/db/loyalty';
-import { brand } from '../../src/theme';
+import { useTheme } from '../../src/context/theme';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import dayjs from 'dayjs';
@@ -16,6 +16,7 @@ const EMPTY = { name: '', phone: '', email: '', credit_balance: '0' };
 
 export default function CustomersScreen() {
   const qc = useQueryClient();
+  const { colors: C } = useTheme();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
@@ -116,6 +117,7 @@ export default function CustomersScreen() {
     const { uri } = await Print.printToFileAsync({ html });
     await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: `${statementCustomer.name} Statement` });
   };
+  const styles = makeStyles(C);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -287,42 +289,44 @@ export default function CustomersScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: brand.primary },
-  headerTitle: { color: '#fff', fontWeight: '700' },
-  searchbar: { margin: 12, elevation: 0, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e0e0e0' },
-  list: { paddingHorizontal: 12, paddingBottom: 80 },
-  card: { marginBottom: 8, borderRadius: 10 },
-  cardContent: { flexDirection: 'row', alignItems: 'center' },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: brand.primary, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  name: { fontSize: 15, fontWeight: '700', color: '#111' },
-  sub: { fontSize: 12, color: '#888', marginTop: 2 },
-  badgeRow: { flexDirection: 'row', gap: 6, marginTop: 4 },
-  badge: { borderRadius: 6 },
-  creditPosBg: { backgroundColor: '#f0fdf4' },
-  creditNegBg: { backgroundColor: '#fef2f2' },
-  empty: { padding: 40, alignItems: 'center' },
-  emptyText: { color: '#aaa', textAlign: 'center', marginTop: 10 },
-  fab: { position: 'absolute', right: 20, bottom: 20, backgroundColor: brand.primary },
-  input: { marginBottom: 10, backgroundColor: '#fff' },
-  wideDialog: { marginHorizontal: 8 },
-  statRow: { flexDirection: 'row', justifyContent: 'space-around', marginVertical: 8 },
-  statBox: { alignItems: 'center' },
-  statVal: { fontSize: 18, fontWeight: '800', color: brand.primary },
-  statLabel: { fontSize: 11, color: '#888', marginTop: 2 },
-  saleRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  saleInv: { fontSize: 13, fontWeight: '600', color: '#111' },
-  saleDate: { fontSize: 11, color: '#aaa', marginTop: 2 },
-  saleAmt: { fontSize: 13, fontWeight: '700', color: brand.primary },
-  salePm: { fontSize: 11, color: '#888' },
-  loyaltyBalance: { alignItems: 'center', paddingVertical: 12 },
-  loyaltyBalNum: { fontSize: 40, fontWeight: '800', color: '#f59e0b' },
-  loyaltyBalLabel: { fontSize: 13, color: '#888', marginTop: 4 },
-  sectionLabel: { fontSize: 13, fontWeight: '700', color: '#555', marginBottom: 6 },
-  txRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  txNote: { fontSize: 13, color: '#111' },
-  txDate: { fontSize: 11, color: '#aaa', marginTop: 2 },
-  txPoints: { fontSize: 15, fontWeight: '700' },
-});
+function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: C.bg },
+    header: { backgroundColor: C.accent },
+    headerTitle: { color: '#fff', fontWeight: '700' },
+    searchbar: { margin: 12, elevation: 0, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+    list: { paddingHorizontal: 12, paddingBottom: 80 },
+    card: { marginBottom: 8, borderRadius: 10 },
+    cardContent: { flexDirection: 'row', alignItems: 'center' },
+    avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.accent, alignItems: 'center', justifyContent: 'center' },
+    avatarText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+    name: { fontSize: 15, fontWeight: '700', color: C.text },
+    sub: { fontSize: 12, color: C.muted, marginTop: 2 },
+    badgeRow: { flexDirection: 'row', gap: 6, marginTop: 4 },
+    badge: { borderRadius: 6 },
+    creditPosBg: { backgroundColor: '#f0fdf4' },
+    creditNegBg: { backgroundColor: '#fef2f2' },
+    empty: { padding: 40, alignItems: 'center' },
+    emptyText: { color: C.muted, textAlign: 'center', marginTop: 10 },
+    fab: { position: 'absolute', right: 20, bottom: 20, backgroundColor: C.accent },
+    input: { marginBottom: 10 },
+    wideDialog: { marginHorizontal: 8 },
+    statRow: { flexDirection: 'row', justifyContent: 'space-around', marginVertical: 8 },
+    statBox: { alignItems: 'center' },
+    statVal: { fontSize: 18, fontWeight: '800', color: C.accent },
+    statLabel: { fontSize: 11, color: C.muted, marginTop: 2 },
+    saleRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border },
+    saleInv: { fontSize: 13, fontWeight: '600', color: C.text },
+    saleDate: { fontSize: 11, color: C.muted, marginTop: 2 },
+    saleAmt: { fontSize: 13, fontWeight: '700', color: C.accent },
+    salePm: { fontSize: 11, color: C.muted },
+    loyaltyBalance: { alignItems: 'center', paddingVertical: 12 },
+    loyaltyBalNum: { fontSize: 40, fontWeight: '800', color: '#f59e0b' },
+    loyaltyBalLabel: { fontSize: 13, color: C.muted, marginTop: 4 },
+    sectionLabel: { fontSize: 13, fontWeight: '700', color: C.muted, marginBottom: 6 },
+    txRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border },
+    txNote: { fontSize: 13, color: C.text },
+    txDate: { fontSize: 11, color: C.muted, marginTop: 2 },
+    txPoints: { fontSize: 15, fontWeight: '700' },
+  });
+}

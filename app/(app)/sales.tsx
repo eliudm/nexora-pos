@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { salesQueries, Sale } from '../../src/db/sales';
 import { useSession } from '../../src/context/session';
-import { brand } from '../../src/theme';
+import { useTheme } from '../../src/context/theme';
 
 const PM_COLORS: Record<string, string> = {
   CASH: '#22c55e',
@@ -17,6 +17,7 @@ const PM_COLORS: Record<string, string> = {
 export default function SalesScreen() {
   const qc = useQueryClient();
   const { user } = useSession();
+  const { colors: C } = useTheme();
   const [from, setFrom] = useState(dayjs().format('YYYY-MM-DD'));
   const [to, setTo] = useState(dayjs().format('YYYY-MM-DD'));
   const [selected, setSelected] = useState<Sale | null>(null);
@@ -59,6 +60,7 @@ export default function SalesScreen() {
   ];
 
   const totalRevenue = (sales ?? []).reduce((s, x) => s + x.total, 0);
+  const styles = makeStyles(C);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -73,7 +75,7 @@ export default function SalesScreen() {
             selected={from === p.from && to === p.to}
             onPress={() => { setFrom(p.from); setTo(p.to); }}
             style={styles.presetChip}
-            selectedColor={brand.primary}
+            selectedColor={C.accent}
             compact
           >
             {p.label}
@@ -179,31 +181,33 @@ export default function SalesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: brand.primary },
-  headerTitle: { color: '#fff', fontWeight: '700' },
-  presets: { flexDirection: 'row', flexWrap: 'wrap', padding: 12, gap: 8 },
-  presetChip: { backgroundColor: '#f0f0f0' },
-  summary: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
-  summaryCount: { fontSize: 13, color: '#666' },
-  summaryTotal: { fontSize: 15, fontWeight: '800', color: brand.primary },
-  list: { paddingHorizontal: 12, paddingBottom: 24 },
-  card: { marginBottom: 8, borderRadius: 10 },
-  cardRow: { flexDirection: 'row', alignItems: 'center' },
-  invoiceNo: { fontSize: 14, fontWeight: '700', color: '#111' },
-  time: { fontSize: 12, color: '#888', marginTop: 2 },
-  customer: { fontSize: 12, color: '#666', marginTop: 2 },
-  total: { fontSize: 15, fontWeight: '800', color: brand.primary },
-  pmChip: { marginTop: 4, height: 22 },
-  pmText: { fontSize: 10, fontWeight: '700' },
-  empty: { padding: 40, alignItems: 'center' },
-  emptyText: { color: '#aaa' },
-  receiptDate: { fontSize: 13, color: '#666', marginBottom: 2 },
-  receiptCustomer: { fontSize: 13, color: '#444', marginBottom: 4 },
-  receiptTotals: { marginTop: 4 },
-  rRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  rLabel: { color: '#666', fontSize: 13 },
-  grandLabel: { fontSize: 15, fontWeight: '800', color: '#111' },
-  grandVal: { fontSize: 15, fontWeight: '800', color: brand.primary },
-});
+function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: C.bg },
+    header: { backgroundColor: C.accent },
+    headerTitle: { color: '#fff', fontWeight: '700' },
+    presets: { flexDirection: 'row', flexWrap: 'wrap', padding: 12, gap: 8 },
+    presetChip: { backgroundColor: C.elevated },
+    summary: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
+    summaryCount: { fontSize: 13, color: C.muted },
+    summaryTotal: { fontSize: 15, fontWeight: '800', color: C.accent },
+    list: { paddingHorizontal: 12, paddingBottom: 24 },
+    card: { marginBottom: 8, borderRadius: 10 },
+    cardRow: { flexDirection: 'row', alignItems: 'center' },
+    invoiceNo: { fontSize: 14, fontWeight: '700', color: C.text },
+    time: { fontSize: 12, color: C.muted, marginTop: 2 },
+    customer: { fontSize: 12, color: C.muted, marginTop: 2 },
+    total: { fontSize: 15, fontWeight: '800', color: C.accent },
+    pmChip: { marginTop: 4, height: 22 },
+    pmText: { fontSize: 10, fontWeight: '700' },
+    empty: { padding: 40, alignItems: 'center' },
+    emptyText: { color: C.muted },
+    receiptDate: { fontSize: 13, color: C.muted, marginBottom: 2 },
+    receiptCustomer: { fontSize: 13, color: C.text, marginBottom: 4 },
+    receiptTotals: { marginTop: 4 },
+    rRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+    rLabel: { color: C.muted, fontSize: 13 },
+    grandLabel: { fontSize: 15, fontWeight: '800', color: C.text },
+    grandVal: { fontSize: 15, fontWeight: '800', color: C.accent },
+  });
+}

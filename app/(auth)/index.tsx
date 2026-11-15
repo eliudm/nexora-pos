@@ -7,7 +7,6 @@ import { router } from 'expo-router';
 import { getDb } from '../../src/db/database';
 import { getSetting } from '../../src/db/settings';
 import { useSession } from '../../src/context/session';
-import { brand } from '../../src/theme';
 
 const PIN_LENGTH = 4;
 
@@ -66,7 +65,7 @@ export default function PinLoginScreen() {
   ];
 
   return (
-    <LinearGradient colors={[brand.gradientStart, brand.gradientEnd]} style={styles.gradient}>
+    <LinearGradient colors={['#6f67ff', '#1db8a0']} style={styles.gradient}>
       <SafeAreaView style={styles.safe}>
         <View style={styles.container}>
           <Text style={styles.bizName}>{businessName}</Text>

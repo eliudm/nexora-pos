@@ -23,7 +23,7 @@ import { darajaService } from '../../src/services/mpesa_daraja';
 import { whatsappService } from '../../src/services/whatsapp';
 import { smsService } from '../../src/services/sms';
 import { getSetting } from '../../src/db/settings';
-import { brand } from '../../src/theme';
+import { useTheme } from '../../src/context/theme';
 
 const PAYMENT_METHODS = ['CASH', 'MPESA', 'SPLIT', 'CREDIT'] as const;
 type PM = typeof PAYMENT_METHODS[number];
@@ -77,6 +77,9 @@ export default function POSScreen() {
   // Post-sale share
   const [lastSale, setLastSale] = useState<any>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+
+  // Cart modal
+  const [cartModalVisible, setCartModalVisible] = useState(false);
 
   const lastScanRef = useRef<string>('');
 
@@ -146,18 +149,20 @@ export default function POSScreen() {
       const existing = prev.find((i) => i.product_id === product.id);
       if (existing) {
         const qty = existing.qty + 1;
-        const vatAmt = existing.unit_price * qty * (existing.vat_rate / 100);
+        const rate = existing.vat_rate / 100;
+        const vatAmt = existing.unit_price * qty * rate / (1 + rate);
         return prev.map((i) =>
           i.product_id === product.id
-            ? { ...i, qty, vat_amount: vatAmt, total: existing.unit_price * qty + vatAmt - i.discount }
+            ? { ...i, qty, vat_amount: vatAmt, total: existing.unit_price * qty - i.discount }
             : i,
         );
       }
-      const vatAmt = product.price * (product.vat_rate / 100);
+      const rate = product.vat_rate / 100;
+      const vatAmt = product.price * rate / (1 + rate);
       return [...prev, {
         product_id: product.id, product_name: product.name, qty: 1,
-        unit_price: product.price, discount: 0, vat_rate: product.vat_rate,
-        vat_amount: vatAmt, total: product.price + vatAmt,
+        unit_price: product.price, cost_price: product.cost, discount: 0, vat_rate: product.vat_rate,
+        vat_amount: vatAmt, total: product.price,
       }];
     });
   }, []);
@@ -168,16 +173,20 @@ export default function POSScreen() {
     if (qty <= 0) { removeFromCart(productId); return; }
     setCart((prev) => prev.map((i) => {
       if (i.product_id !== productId) return i;
-      const vatAmt = i.unit_price * qty * (i.vat_rate / 100);
-      return { ...i, qty, vat_amount: vatAmt, total: i.unit_price * qty + vatAmt - i.discount };
+      const rate = i.vat_rate / 100;
+      const vatAmt = i.unit_price * qty * rate / (1 + rate);
+      return { ...i, qty, vat_amount: vatAmt, total: i.unit_price * qty - i.discount };
     }));
   };
 
   const applyItemDiscount = (productId: number, discountAmt: number) => {
     setCart((prev) => prev.map((i) => {
       if (i.product_id !== productId) return i;
-      const baseTotal = i.unit_price * i.qty * (1 + i.vat_rate / 100);
-      return { ...i, discount: discountAmt, total: Math.max(0, baseTotal - discountAmt) };
+      const baseTotal = i.unit_price * i.qty; // inclusive price, no VAT addition
+      const rate = i.vat_rate / 100;
+      const newTotal = Math.max(0, baseTotal - discountAmt);
+      const vatAmt = newTotal * rate / (1 + rate);
+      return { ...i, discount: discountAmt, vat_amount: vatAmt, total: newTotal };
     }));
   };
 
@@ -187,7 +196,8 @@ export default function POSScreen() {
   const orderDiscount = parseFloat(discount) || 0;
   const pointsRedeemed = parseInt(redeemPoints) || 0;
   const loyaltyDiscount = pointsRedeemed * KES_PER_POINT;
-  const total = Math.max(0, subtotal + tax - itemDiscountTotal - orderDiscount - loyaltyDiscount);
+  // tax is extracted from subtotal (inclusive), not added on top
+  const total = Math.max(0, subtotal - itemDiscountTotal - orderDiscount - loyaltyDiscount);
 
   const filteredProducts = selectedCat
     ? (products ?? []).filter((p) => p.category_id === selectedCat)
@@ -435,190 +445,275 @@ export default function POSScreen() {
     });
   };
 
+  const { colors: D } = useTheme();
+
+  const cartItemCount = cart.reduce((s, i) => s + i.qty, 0);
+
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.container}>
-        {/* Product Grid */}
-        <View style={styles.left}>
-          <Appbar.Header style={styles.header}>
-            <Appbar.Content title="Point of Sale" titleStyle={styles.headerTitle} />
-            {user && <Text style={styles.cashierBadge}>{user.name}</Text>}
-            <Appbar.Action icon="barcode-scan" color="#fff" onPress={openScanner} />
-            <View>
-              <Appbar.Action icon="pause-circle-outline" color="#fff" onPress={() => setResumeDialogOpen(true)} />
-            </View>
-          </Appbar.Header>
+    <SafeAreaView style={[styles.safe, { backgroundColor: D.bg }]}>
 
-          <Searchbar
-            placeholder="Search products..."
-            value={search}
-            onChangeText={setSearch}
-            style={styles.searchbar}
-            inputStyle={{ fontSize: 14 }}
-          />
-
-          {(categories?.length ?? 0) > 0 && (
-            <FlatList
-              data={[{ id: null, name: 'All', color: brand.primary }, ...(categories ?? [])]}
-              keyExtractor={(c) => String(c.id)}
-              horizontal
-              style={styles.catList}
-              contentContainerStyle={{ paddingHorizontal: 12, gap: 8 }}
-              showsHorizontalScrollIndicator={false}
-              renderItem={({ item }) => (
-                <Chip
-                  selected={selectedCat === item.id}
-                  onPress={() => setSelectedCat(item.id as any)}
-                  style={[styles.catChip, selectedCat === item.id && { backgroundColor: brand.primary }]}
-                  textStyle={[styles.catText, selectedCat === item.id && { color: '#fff' }]}
-                  compact
-                >
-                  {item.name}
-                </Chip>
-              )}
-            />
-          )}
-
-          {isLoading ? (
-            <ActivityIndicator style={{ marginTop: 40 }} color={brand.primary} />
-          ) : (
-            <FlatList
-              data={filteredProducts}
-              keyExtractor={(p) => String(p.id)}
-              numColumns={2}
-              contentContainerStyle={styles.productGrid}
-              columnWrapperStyle={{ gap: 10 }}
-              renderItem={({ item }) => (
-                <Pressable
-                  style={({ pressed }) => [styles.productCard, pressed && styles.productCardPressed]}
-                  onPress={() => addToCart(item)}
-                >
-                  <MaterialCommunityIcons name="package-variant" size={32} color={brand.primary} />
-                  <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
-                  <Text style={styles.productPrice}>KES {item.price.toLocaleString()}</Text>
-                  {item.track_stock === 1 && (
-                    <Text style={[styles.stockBadge, item.stock_qty < 5 && styles.lowStock]}>
-                      Stock: {item.stock_qty}
-                    </Text>
-                  )}
-                </Pressable>
-              )}
-            />
-          )}
+      {/* ── Header ── */}
+      <View style={[styles.header, { backgroundColor: D.surface, borderBottomColor: D.border }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.headerTitle, { color: D.text }]}>Point of Sale</Text>
+          {user && <Text style={[styles.cashierBadge, { color: D.muted }]}>{user.name}</Text>}
         </View>
-
-        {/* Cart */}
-        <View style={styles.right}>
-          <View style={styles.cartHeader}>
-            <Text style={styles.cartTitle}>Cart ({cart.length})</Text>
-            <Pressable onPress={() => setCustomerDialogOpen(true)}>
-              <Text style={styles.customerBtn}>
-                {selectedCustomer ? selectedCustomer.name : '+ Customer'}
-              </Text>
-            </Pressable>
-          </View>
-
-          {selectedCustomer && loyaltyBalance > 0 && (
-            <View style={styles.loyaltyBanner}>
-              <MaterialCommunityIcons name="star-circle" size={16} color="#f59e0b" />
-              <Text style={styles.loyaltyText}>{loyaltyBalance} pts = KES {(loyaltyBalance * KES_PER_POINT).toFixed(0)}</Text>
-            </View>
-          )}
-
-          <FlatList
-            data={cart}
-            keyExtractor={(i) => String(i.product_id)}
-            style={{ flex: 1 }}
-            renderItem={({ item }) => (
-              <View style={styles.cartItem}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.cartItemName} numberOfLines={1}>{item.product_name}</Text>
-                  <View style={{ flexDirection: 'row', gap: 6, marginTop: 2 }}>
-                    <Text style={styles.cartItemPrice}>KES {item.unit_price.toLocaleString()}</Text>
-                    {item.discount > 0 && (
-                      <Text style={styles.itemDiscount}>-{item.discount.toFixed(0)}</Text>
-                    )}
-                  </View>
-                </View>
-                <View style={styles.qtyRow}>
-                  <Pressable style={styles.qtyBtn} onPress={() => updateQty(item.product_id, item.qty - 1)}>
-                    <Text style={styles.qtyBtnText}>−</Text>
-                  </Pressable>
-                  <Pressable onLongPress={() => { setQtyDialogItem(item); setQtyInput(String(item.qty)); }}>
-                    <Text style={styles.qtyVal}>{item.qty}</Text>
-                  </Pressable>
-                  <Pressable style={styles.qtyBtn} onPress={() => updateQty(item.product_id, item.qty + 1)}>
-                    <Text style={styles.qtyBtnText}>+</Text>
-                  </Pressable>
-                </View>
-                <Pressable onPress={() => { setItemDiscountItem(item); setItemDiscountInput(String(item.discount || '')); }}>
-                  <Text style={styles.cartItemTotal}>KES {item.total.toFixed(0)}</Text>
-                </Pressable>
-                <Pressable onPress={() => removeFromCart(item.product_id)} style={{ padding: 4 }}>
-                  <MaterialCommunityIcons name="close-circle" size={18} color="#ccc" />
-                </Pressable>
-              </View>
-            )}
-            ListEmptyComponent={
-              <View style={styles.emptyCart}>
-                <MaterialCommunityIcons name="cart-outline" size={48} color="#ccc" />
-                <Text style={styles.emptyCartText}>Cart is empty</Text>
-                <Text style={styles.emptyCartSub}>Tap a product or scan a barcode</Text>
-              </View>
-            }
-          />
-
-          <View style={styles.totals}>
-            <View style={styles.totalRow}><Text style={styles.totalLabel}>Subtotal</Text><Text style={styles.totalVal}>KES {subtotal.toLocaleString()}</Text></View>
-            <View style={styles.totalRow}><Text style={styles.totalLabel}>VAT</Text><Text style={styles.totalVal}>KES {tax.toFixed(0)}</Text></View>
-            {itemDiscountTotal > 0 && <View style={styles.totalRow}><Text style={styles.totalLabel}>Item Discounts</Text><Text style={[styles.totalVal, { color: '#e53935' }]}>-KES {itemDiscountTotal.toFixed(0)}</Text></View>}
-            {orderDiscount > 0 && <View style={styles.totalRow}><Text style={styles.totalLabel}>Order Discount</Text><Text style={[styles.totalVal, { color: '#e53935' }]}>-KES {orderDiscount}</Text></View>}
-            {loyaltyDiscount > 0 && <View style={styles.totalRow}><Text style={styles.totalLabel}>Loyalty Discount</Text><Text style={[styles.totalVal, { color: '#f59e0b' }]}>-KES {loyaltyDiscount.toFixed(0)}</Text></View>}
-            <View style={[styles.totalRow, styles.grandTotal]}>
-              <Text style={styles.grandLabel}>TOTAL</Text>
-              <Text style={styles.grandVal}>KES {total.toFixed(0)}</Text>
-            </View>
-          </View>
-
-          <View style={styles.cartActions}>
-            <Button
-              mode="outlined"
-              compact
-              onPress={() => setHoldDialogOpen(true)}
-              disabled={cart.length === 0}
-              style={styles.holdBtn}
-              icon="pause"
-            >
-              Hold
-            </Button>
-            <Button
-              mode="outlined"
-              compact
-              onPress={() => router.push('/(app)/layaway')}
-              style={[styles.holdBtn, { borderColor: '#f59e0b' }]}
-              icon="package-down"
-              textColor="#f59e0b"
-            >
-              Layaway
-            </Button>
-            <Button
-              mode="contained"
-              onPress={() => setCheckoutVisible(true)}
-              disabled={cart.length === 0}
-              style={styles.checkoutBtn}
-              contentStyle={{ height: 46 }}
-              labelStyle={{ fontSize: 15, fontWeight: '700' }}
-            >
-              Checkout
-            </Button>
-          </View>
-        </View>
+        <Pressable
+          style={[styles.iconBtn, { backgroundColor: selectedCustomer ? D.accent + '22' : D.elevated, borderWidth: 1, borderColor: selectedCustomer ? D.accent : 'transparent' }]}
+          onPress={() => setCustomerDialogOpen(true)}
+        >
+          <MaterialCommunityIcons name="account-circle-outline" size={22} color={selectedCustomer ? D.accent : D.muted} />
+        </Pressable>
+        <Pressable style={[styles.iconBtn, { backgroundColor: D.elevated, marginLeft: 8 }]} onPress={openScanner}>
+          <MaterialCommunityIcons name="barcode-scan" size={22} color={D.text} />
+        </Pressable>
+        <Pressable style={[styles.iconBtn, { backgroundColor: D.elevated, marginLeft: 8 }]} onPress={() => setResumeDialogOpen(true)}>
+          <MaterialCommunityIcons name="history" size={22} color={D.text} />
+        </Pressable>
       </View>
 
+      {/* ── Search ── */}
+      <View style={[styles.searchWrap, { backgroundColor: D.elevated, borderColor: D.border }]}>
+        <MaterialCommunityIcons name="magnify" size={18} color={D.muted} style={{ marginRight: 8 }} />
+        <RNTextInput
+          placeholder="Search products..."
+          placeholderTextColor={D.muted}
+          value={search}
+          onChangeText={setSearch}
+          style={[styles.searchInput, { color: D.text }]}
+        />
+        {search.length > 0 && (
+          <Pressable onPress={() => setSearch('')}>
+            <MaterialCommunityIcons name="close-circle" size={16} color={D.muted} />
+          </Pressable>
+        )}
+      </View>
+
+      {/* ── Categories ── */}
+      {(categories?.length ?? 0) > 0 && (
+        <FlatList
+          data={[{ id: null, name: 'All' }, ...(categories ?? [])]}
+          keyExtractor={(c) => String(c.id)}
+          horizontal
+          style={styles.catList}
+          contentContainerStyle={{ paddingHorizontal: 12, gap: 8, paddingVertical: 8 }}
+          showsHorizontalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <Pressable
+              onPress={() => setSelectedCat(item.id as any)}
+              style={[
+                styles.catChip,
+                { borderColor: D.border, backgroundColor: D.elevated },
+                selectedCat === item.id && { backgroundColor: D.accent, borderColor: D.accent },
+              ]}
+            >
+              <Text style={[styles.catText, { color: D.muted }, selectedCat === item.id && { color: '#fff' }]}>
+                {item.name}
+              </Text>
+            </Pressable>
+          )}
+        />
+      )}
+
+      {/* ── Product Grid — 3 columns, full width ── */}
+      {isLoading ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={D.accent} />
+        </View>
+      ) : (
+        <FlatList
+          data={filteredProducts}
+          keyExtractor={(p) => String(p.id)}
+          numColumns={3}
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.productGrid}
+          columnWrapperStyle={{ gap: 10 }}
+          renderItem={({ item }) => (
+            <Pressable
+              style={({ pressed }) => [
+                styles.productCard,
+                { backgroundColor: D.surface, borderColor: D.border },
+                pressed && { backgroundColor: D.elevated, borderColor: D.accent },
+              ]}
+              onPress={() => addToCart(item)}
+            >
+              <View style={[styles.productIconWrap, { backgroundColor: D.elevated }]}>
+                <MaterialCommunityIcons name="package-variant" size={26} color={D.accent} />
+              </View>
+              <Text style={[styles.productName, { color: D.text }]} numberOfLines={2}>{item.name}</Text>
+              <Text style={[styles.productPrice, { color: D.accent }]}>KES {item.price.toLocaleString()}</Text>
+              {item.track_stock === 1 && (
+                <Text style={[styles.stockBadge, { color: item.stock_qty < 5 ? D.danger : D.muted }]}>
+                  {item.stock_qty} left
+                </Text>
+              )}
+            </Pressable>
+          )}
+          ListEmptyComponent={
+            <View style={{ alignItems: 'center', paddingTop: 80 }}>
+              <MaterialCommunityIcons name="package-variant-closed" size={56} color={D.border} />
+              <Text style={{ color: D.muted, marginTop: 14, fontSize: 15, fontWeight: '600' }}>No products found</Text>
+              <Text style={{ color: D.border, marginTop: 4, fontSize: 12 }}>Try a different search or category</Text>
+            </View>
+          }
+        />
+      )}
+
+      {/* ── Sticky Cart Bar ── */}
+      {cart.length > 0 && (
+        <View style={[styles.cartBar, { backgroundColor: D.surface, borderTopColor: D.border }]}>
+          <Pressable style={styles.cartBarInfo} onPress={() => setCartModalVisible(true)}>
+            <View style={[styles.cartBadge, { backgroundColor: D.accent }]}>
+              <Text style={styles.cartBadgeText}>{cartItemCount}</Text>
+            </View>
+            <View style={{ marginLeft: 10 }}>
+              <Text style={[styles.cartBarLabel, { color: D.muted }]}>View Cart</Text>
+              <Text style={[styles.cartBarTotal, { color: D.text }]}>KES {total.toFixed(0)}</Text>
+            </View>
+          </Pressable>
+          <Pressable
+            style={[styles.checkoutBtn, { backgroundColor: D.accent }]}
+            onPress={() => setCheckoutVisible(true)}
+          >
+            <Text style={styles.checkoutBtnText}>Checkout</Text>
+            <MaterialCommunityIcons name="arrow-right" size={18} color="#fff" />
+          </Pressable>
+        </View>
+      )}
+
       <Portal>
+        {/* ── Cart Modal (bottom sheet style) ── */}
+        <Dialog
+          visible={cartModalVisible}
+          onDismiss={() => setCartModalVisible(false)}
+          style={[styles.cartModal, { backgroundColor: D.surface }]}
+        >
+          {/* Modal header */}
+          <View style={[styles.cartModalHeader, { borderBottomColor: D.border }]}>
+            <View>
+              <Text style={[styles.cartTitle, { color: D.text }]}>Cart</Text>
+              <Text style={[styles.cartSubtitle, { color: D.muted }]}>{cartItemCount} item{cartItemCount !== 1 ? 's' : ''} · KES {total.toFixed(0)}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Pressable
+                style={[styles.customerPill, { backgroundColor: D.elevated, borderColor: selectedCustomer ? D.accent : D.border }]}
+                onPress={() => { setCartModalVisible(false); setTimeout(() => setCustomerDialogOpen(true), 200); }}
+              >
+                <MaterialCommunityIcons name="account" size={12} color={selectedCustomer ? D.accent : D.muted} style={{ marginRight: 4 }} />
+                <Text style={{ fontSize: 11, fontWeight: '600', color: selectedCustomer ? D.accent : D.muted }} numberOfLines={1}>
+                  {selectedCustomer ? selectedCustomer.name : 'Customer'}
+                </Text>
+              </Pressable>
+              <Pressable style={[styles.iconBtn, { backgroundColor: D.elevated }]} onPress={() => setCartModalVisible(false)}>
+                <MaterialCommunityIcons name="close" size={18} color={D.muted} />
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Loyalty Banner */}
+          {selectedCustomer && loyaltyBalance > 0 && (
+            <View style={[styles.loyaltyBanner, { backgroundColor: '#1a1200', borderColor: '#3a2800', marginHorizontal: 16, marginTop: 10 }]}>
+              <MaterialCommunityIcons name="star-circle" size={14} color={D.warning} />
+              <Text style={[styles.loyaltyText, { color: D.warning }]}>{loyaltyBalance} pts = KES {(loyaltyBalance * KES_PER_POINT).toFixed(0)}</Text>
+            </View>
+          )}
+
+          {/* Cart Items */}
+          <Dialog.ScrollArea style={{ paddingHorizontal: 0, maxHeight: 300 }}>
+            <FlatList
+              data={cart}
+              keyExtractor={(i) => String(i.product_id)}
+              renderItem={({ item }) => (
+                <View style={[styles.cartItem, { borderBottomColor: D.border, paddingHorizontal: 16 }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.cartItemName, { color: D.text }]} numberOfLines={1}>{item.product_name}</Text>
+                    <Text style={[styles.cartItemPrice, { color: D.muted }]}>@ KES {item.unit_price.toLocaleString()}{item.discount > 0 ? `  −${item.discount.toFixed(0)}` : ''}</Text>
+                  </View>
+                  <View style={styles.qtyRow}>
+                    <Pressable style={[styles.qtyBtn, { backgroundColor: D.elevated, borderColor: D.border }]} onPress={() => updateQty(item.product_id, item.qty - 1)}>
+                      <Text style={[styles.qtyBtnText, { color: D.text }]}>−</Text>
+                    </Pressable>
+                    <Pressable onLongPress={() => { setQtyDialogItem(item); setQtyInput(String(item.qty)); }}>
+                      <Text style={[styles.qtyVal, { color: D.text }]}>{item.qty}</Text>
+                    </Pressable>
+                    <Pressable style={[styles.qtyBtn, { backgroundColor: D.accent }]} onPress={() => updateQty(item.product_id, item.qty + 1)}>
+                      <Text style={[styles.qtyBtnText, { color: '#fff' }]}>+</Text>
+                    </Pressable>
+                  </View>
+                  <Pressable onPress={() => { setItemDiscountItem(item); setItemDiscountInput(String(item.discount || '')); }}>
+                    <Text style={[styles.cartItemTotal, { color: D.text }]}>KES {item.total.toFixed(0)}</Text>
+                  </Pressable>
+                  <Pressable onPress={() => removeFromCart(item.product_id)} style={{ padding: 6 }}>
+                    <MaterialCommunityIcons name="trash-can-outline" size={18} color={D.danger + 'aa'} />
+                  </Pressable>
+                </View>
+              )}
+            />
+          </Dialog.ScrollArea>
+
+          {/* Totals */}
+          <View style={[styles.cartModalTotals, { borderTopColor: D.border }]}>
+            <View style={styles.totalRow}>
+              <Text style={[styles.totalLabel, { color: D.muted }]}>Subtotal</Text>
+              <Text style={[styles.totalVal, { color: D.text }]}>KES {subtotal.toLocaleString()}</Text>
+            </View>
+            <View style={styles.totalRow}>
+              <Text style={[styles.totalLabel, { color: D.muted }]}>Incl. VAT</Text>
+              <Text style={[styles.totalVal, { color: D.muted }]}>KES {tax.toFixed(0)}</Text>
+            </View>
+            {itemDiscountTotal > 0 && (
+              <View style={styles.totalRow}>
+                <Text style={[styles.totalLabel, { color: D.muted }]}>Discounts</Text>
+                <Text style={[styles.totalVal, { color: D.danger }]}>−KES {itemDiscountTotal.toFixed(0)}</Text>
+              </View>
+            )}
+            {orderDiscount > 0 && (
+              <View style={styles.totalRow}>
+                <Text style={[styles.totalLabel, { color: D.muted }]}>Order Discount</Text>
+                <Text style={[styles.totalVal, { color: D.danger }]}>−KES {orderDiscount}</Text>
+              </View>
+            )}
+            {loyaltyDiscount > 0 && (
+              <View style={styles.totalRow}>
+                <Text style={[styles.totalLabel, { color: D.muted }]}>Loyalty</Text>
+                <Text style={[styles.totalVal, { color: D.warning }]}>−KES {loyaltyDiscount.toFixed(0)}</Text>
+              </View>
+            )}
+            <View style={[styles.grandTotalRow, { backgroundColor: D.elevated, borderColor: D.border }]}>
+              <Text style={[styles.grandLabel, { color: D.muted }]}>TOTAL</Text>
+              <Text style={[styles.grandVal, { color: D.accent }]}>KES {total.toFixed(0)}</Text>
+            </View>
+          </View>
+
+          {/* Cart Actions */}
+          <View style={[styles.cartActions, { paddingHorizontal: 16, paddingBottom: 12, paddingTop: 8 }]}>
+            <Pressable
+              style={[styles.actionBtn, { backgroundColor: D.elevated, borderColor: D.border }]}
+              onPress={() => { setCartModalVisible(false); setTimeout(() => setHoldDialogOpen(true), 200); }}
+            >
+              <MaterialCommunityIcons name="pause" size={16} color={D.muted} />
+              <Text style={[styles.actionBtnText, { color: D.muted }]}>Hold</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionBtn, { backgroundColor: D.elevated, borderColor: D.warning + '55' }]}
+              onPress={() => { setCartModalVisible(false); router.push('/(app)/layaway'); }}
+            >
+              <MaterialCommunityIcons name="package-down" size={16} color={D.warning} />
+              <Text style={[styles.actionBtnText, { color: D.warning }]}>Layaway</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.checkoutBtn, { backgroundColor: D.accent }]}
+              onPress={() => { setCartModalVisible(false); setTimeout(() => setCheckoutVisible(true), 200); }}
+            >
+              <Text style={styles.checkoutBtnText}>Checkout</Text>
+              <MaterialCommunityIcons name="arrow-right" size={18} color="#fff" />
+            </Pressable>
+          </View>
+        </Dialog>
+
         {/* Barcode Scanner */}
-        <Dialog visible={scannerVisible} onDismiss={() => setScannerVisible(false)}>
-          <Dialog.Title>Scan Barcode</Dialog.Title>
+        <Dialog visible={scannerVisible} onDismiss={() => setScannerVisible(false)} style={{ backgroundColor: D.surface }}>
+          <Dialog.Title style={{ color: D.text }}>Scan Barcode</Dialog.Title>
           <Dialog.Content style={{ height: 300 }}>
             {scannerVisible && (
               <CameraView
@@ -630,50 +725,51 @@ export default function POSScreen() {
             )}
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setScannerVisible(false)}>Cancel</Button>
+            <Button textColor={D.muted} onPress={() => setScannerVisible(false)}>Cancel</Button>
           </Dialog.Actions>
         </Dialog>
 
         {/* Customer Picker */}
-        <Dialog visible={customerDialogOpen} onDismiss={() => setCustomerDialogOpen(false)}>
-          <Dialog.Title>Select Customer</Dialog.Title>
+        <Dialog visible={customerDialogOpen} onDismiss={() => setCustomerDialogOpen(false)} style={{ backgroundColor: D.surface }}>
+          <Dialog.Title style={{ color: D.text }}>Select Customer</Dialog.Title>
           <Dialog.Content>
-            <Searchbar placeholder="Search..." value={customerSearch} onChangeText={setCustomerSearch} style={{ marginBottom: 8 }} />
+            <Searchbar placeholder="Search..." value={customerSearch} onChangeText={setCustomerSearch} style={{ marginBottom: 8, backgroundColor: D.elevated }} />
             {(customers ?? []).slice(0, 6).map((c) => (
-              <Pressable key={c.id} style={styles.customerRow} onPress={() => onCustomerSelected(c)}>
-                <Text style={styles.customerName}>{c.name}</Text>
+              <Pressable key={c.id} style={[styles.customerRow, { borderBottomColor: D.border }]} onPress={() => onCustomerSelected(c)}>
+                <Text style={[styles.customerName, { color: D.text }]}>{c.name}</Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <Text style={styles.customerPhone}>{c.phone}</Text>
+                  <Text style={[styles.customerPhone, { color: D.muted }]}>{c.phone}</Text>
                   {c.loyalty_points > 0 && (
-                    <Text style={styles.customerPoints}>{c.loyalty_points} pts</Text>
+                    <Text style={[styles.customerPoints, { color: D.warning }]}>{c.loyalty_points} pts</Text>
                   )}
                 </View>
               </Pressable>
             ))}
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => { setSelectedCustomer(null); setLoyaltyBalance(0); setCustomerDialogOpen(false); }}>Clear</Button>
-            <Button onPress={() => setCustomerDialogOpen(false)}>Done</Button>
+            <Button textColor={D.muted} onPress={() => { setSelectedCustomer(null); setLoyaltyBalance(0); setCustomerDialogOpen(false); }}>Clear</Button>
+            <Button textColor={D.accent} onPress={() => setCustomerDialogOpen(false)}>Done</Button>
           </Dialog.Actions>
         </Dialog>
 
-        {/* Quantity Input Dialog (long-press qty) */}
-        <Dialog visible={!!qtyDialogItem} onDismiss={() => setQtyDialogItem(null)}>
-          <Dialog.Title>Set Quantity</Dialog.Title>
+        {/* Quantity Input Dialog */}
+        <Dialog visible={!!qtyDialogItem} onDismiss={() => setQtyDialogItem(null)} style={{ backgroundColor: D.surface }}>
+          <Dialog.Title style={{ color: D.text }}>Set Quantity</Dialog.Title>
           <Dialog.Content>
-            <Text style={{ marginBottom: 8, color: '#555' }}>{qtyDialogItem?.product_name}</Text>
+            <Text style={{ marginBottom: 8, color: D.muted }}>{qtyDialogItem?.product_name}</Text>
             <RNTextInput
               value={qtyInput}
               onChangeText={setQtyInput}
               keyboardType="decimal-pad"
-              style={styles.mpesaInput}
+              style={[styles.darkInput, { color: D.text, borderColor: D.border, backgroundColor: D.elevated }]}
+              placeholderTextColor={D.muted}
               autoFocus
               placeholder="Enter quantity"
             />
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setQtyDialogItem(null)}>Cancel</Button>
-            <Button mode="contained" onPress={() => {
+            <Button textColor={D.muted} onPress={() => setQtyDialogItem(null)}>Cancel</Button>
+            <Button mode="contained" buttonColor={D.accent} onPress={() => {
               const q = parseFloat(qtyInput);
               if (qtyDialogItem && !isNaN(q)) updateQty(qtyDialogItem.product_id, q);
               setQtyDialogItem(null);
@@ -681,24 +777,25 @@ export default function POSScreen() {
           </Dialog.Actions>
         </Dialog>
 
-        {/* Item Discount Dialog (tap item total) */}
-        <Dialog visible={!!itemDiscountItem} onDismiss={() => setItemDiscountItem(null)}>
-          <Dialog.Title>Item Discount</Dialog.Title>
+        {/* Item Discount Dialog */}
+        <Dialog visible={!!itemDiscountItem} onDismiss={() => setItemDiscountItem(null)} style={{ backgroundColor: D.surface }}>
+          <Dialog.Title style={{ color: D.text }}>Item Discount</Dialog.Title>
           <Dialog.Content>
-            <Text style={{ marginBottom: 4, color: '#555' }}>{itemDiscountItem?.product_name}</Text>
-            <Text style={{ marginBottom: 8, fontSize: 12, color: '#888' }}>Line total: KES {((itemDiscountItem?.unit_price ?? 0) * (itemDiscountItem?.qty ?? 1) * (1 + (itemDiscountItem?.vat_rate ?? 0) / 100)).toFixed(0)}</Text>
+            <Text style={{ marginBottom: 4, color: D.muted }}>{itemDiscountItem?.product_name}</Text>
+            <Text style={{ marginBottom: 8, fontSize: 12, color: D.muted }}>Line total: KES {((itemDiscountItem?.unit_price ?? 0) * (itemDiscountItem?.qty ?? 1)).toFixed(0)}</Text>
             <RNTextInput
               value={itemDiscountInput}
               onChangeText={setItemDiscountInput}
               keyboardType="decimal-pad"
-              style={styles.mpesaInput}
+              style={[styles.darkInput, { color: D.text, borderColor: D.border, backgroundColor: D.elevated }]}
+              placeholderTextColor={D.muted}
               autoFocus
               placeholder="Discount amount (KES)"
             />
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => { if (itemDiscountItem) applyItemDiscount(itemDiscountItem.product_id, 0); setItemDiscountItem(null); }}>Remove</Button>
-            <Button mode="contained" onPress={() => {
+            <Button textColor={D.danger} onPress={() => { if (itemDiscountItem) applyItemDiscount(itemDiscountItem.product_id, 0); setItemDiscountItem(null); }}>Remove</Button>
+            <Button mode="contained" buttonColor={D.accent} onPress={() => {
               const d = parseFloat(itemDiscountInput) || 0;
               if (itemDiscountItem) applyItemDiscount(itemDiscountItem.product_id, d);
               setItemDiscountItem(null);
@@ -707,59 +804,62 @@ export default function POSScreen() {
         </Dialog>
 
         {/* Hold Sale Dialog */}
-        <Dialog visible={holdDialogOpen} onDismiss={() => setHoldDialogOpen(false)}>
-          <Dialog.Title>Hold Sale</Dialog.Title>
+        <Dialog visible={holdDialogOpen} onDismiss={() => setHoldDialogOpen(false)} style={{ backgroundColor: D.surface }}>
+          <Dialog.Title style={{ color: D.text }}>Hold Sale</Dialog.Title>
           <Dialog.Content>
-            <Text style={{ color: '#555', marginBottom: 10 }}>Park this sale and serve another customer. Resume it later.</Text>
+            <Text style={{ color: D.muted, marginBottom: 10 }}>Park this sale and serve another customer. Resume it later.</Text>
             <RNTextInput
               placeholder="Label (optional, e.g. Table 5)"
+              placeholderTextColor={D.muted}
               value={holdLabel}
               onChangeText={setHoldLabel}
-              style={styles.mpesaInput}
+              style={[styles.darkInput, { color: D.text, borderColor: D.border, backgroundColor: D.elevated }]}
             />
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setHoldDialogOpen(false)}>Cancel</Button>
-            <Button mode="contained" onPress={holdSale} icon="pause">Hold Sale</Button>
+            <Button textColor={D.muted} onPress={() => setHoldDialogOpen(false)}>Cancel</Button>
+            <Button mode="contained" buttonColor={D.accent} onPress={holdSale} icon="pause">Hold Sale</Button>
           </Dialog.Actions>
         </Dialog>
 
-        {/* Resume Held Sales Dialog */}
-        <Dialog visible={resumeDialogOpen} onDismiss={() => setResumeDialogOpen(false)}>
-          <Dialog.Title>Held Sales</Dialog.Title>
+        {/* Resume Held Sales */}
+        <Dialog visible={resumeDialogOpen} onDismiss={() => setResumeDialogOpen(false)} style={{ backgroundColor: D.surface }}>
+          <Dialog.Title style={{ color: D.text }}>Held Sales</Dialog.Title>
           <Dialog.Content>
             {(holdSales?.length ?? 0) === 0 ? (
-              <Text style={{ color: '#888', textAlign: 'center', paddingVertical: 16 }}>No held sales</Text>
+              <Text style={{ color: D.muted, textAlign: 'center', paddingVertical: 16 }}>No held sales</Text>
             ) : (
               holdSales!.map((h) => (
-                <Pressable key={h.id} style={styles.holdRow} onPress={() => resumeHeldSale(h)}>
+                <Pressable key={h.id} style={[styles.holdRow, { borderBottomColor: D.border }]} onPress={() => resumeHeldSale(h)}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.holdLabel}>{h.label || `Held at ${dayjs(h.created_at).format('HH:mm')}`}</Text>
-                    <Text style={styles.holdSub}>{h.customer_name ?? 'No customer'} · {(h.items?.length ?? 0)} items</Text>
+                    <Text style={[styles.holdLabel, { color: D.text }]}>{h.label || `Held at ${dayjs(h.created_at).format('HH:mm')}`}</Text>
+                    <Text style={[styles.holdSub, { color: D.muted }]}>{h.customer_name ?? 'No customer'} · {(h.items?.length ?? 0)} items</Text>
                   </View>
-                  <MaterialCommunityIcons name="play-circle" size={24} color={brand.primary} />
+                  <MaterialCommunityIcons name="play-circle" size={24} color={D.accent} />
                 </Pressable>
               ))
             )}
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setResumeDialogOpen(false)}>Close</Button>
+            <Button textColor={D.muted} onPress={() => setResumeDialogOpen(false)}>Close</Button>
           </Dialog.Actions>
         </Dialog>
 
         {/* Checkout Dialog */}
-        <Dialog visible={checkoutVisible} onDismiss={() => setCheckoutVisible(false)}>
-          <Dialog.Title>Payment — KES {total.toFixed(0)}</Dialog.Title>
+        <Dialog visible={checkoutVisible} onDismiss={() => setCheckoutVisible(false)} style={{ backgroundColor: D.surface }}>
+          <Dialog.Title style={{ color: D.accent, fontSize: 18, fontWeight: '800' }}>KES {total.toFixed(0)}</Dialog.Title>
           <Dialog.Content>
             {selectedCustomer && (
-              <Text style={styles.checkoutCustomer}>
-                {selectedCustomer.name}  ·  Balance: KES {selectedCustomer.credit_balance.toLocaleString()}  ·  {loyaltyBalance} pts
-              </Text>
+              <View style={[styles.checkoutCustomer, { backgroundColor: D.elevated, borderColor: D.border }]}>
+                <Text style={{ color: D.text, fontSize: 12, fontWeight: '600' }}>{selectedCustomer.name}</Text>
+                <Text style={{ color: D.muted, fontSize: 11 }}>Balance: KES {selectedCustomer.credit_balance.toLocaleString()} · {loyaltyBalance} pts</Text>
+              </View>
             )}
-            <Text style={{ marginBottom: 8, fontWeight: '600' }}>Payment Method</Text>
+            <Text style={{ marginBottom: 8, fontWeight: '600', color: D.muted, fontSize: 12, marginTop: 4 }}>PAYMENT METHOD</Text>
             <RadioButton.Group value={payMethod} onValueChange={(v) => setPayMethod(v as PM)}>
               {PAYMENT_METHODS.map((m) => (
-                <RadioButton.Item key={m} label={m === 'SPLIT' ? 'Split (Cash + M-Pesa)' : m} value={m} />
+                <RadioButton.Item key={m} label={m === 'SPLIT' ? 'Split (Cash + M-Pesa)' : m} value={m}
+                  labelStyle={{ color: D.text }} color={D.accent} uncheckedColor={D.muted} />
               ))}
             </RadioButton.Group>
 
@@ -768,18 +868,20 @@ export default function POSScreen() {
                 <View style={styles.stkRow}>
                   <RNTextInput
                     placeholder="Customer phone (07...)"
+                    placeholderTextColor={D.muted}
                     value={stkPhone}
                     onChangeText={setStkPhone}
-                    style={[styles.mpesaInput, { flex: 1, marginRight: 8 }]}
+                    style={[styles.darkInput, { flex: 1, marginRight: 8, color: D.text, borderColor: D.border, backgroundColor: D.elevated }]}
                     keyboardType="phone-pad"
                   />
-                  <Button mode="outlined" onPress={handleStkPush} loading={stkLoading} compact>Prompt</Button>
+                  <Button mode="outlined" textColor={D.accent} style={{ borderColor: D.accent }} onPress={handleStkPush} loading={stkLoading} compact>Prompt</Button>
                 </View>
                 <RNTextInput
                   placeholder="M-Pesa Transaction Code *"
+                  placeholderTextColor={D.muted}
                   value={mpesaRef}
                   onChangeText={setMpesaRef}
-                  style={styles.mpesaInput}
+                  style={[styles.darkInput, { color: D.text, borderColor: D.border, backgroundColor: D.elevated }]}
                   autoCapitalize="characters"
                 />
               </View>
@@ -787,9 +889,10 @@ export default function POSScreen() {
 
             {payMethod === 'SPLIT' && (
               <View>
-                <Text style={styles.splitLabel}>Total: KES {total.toFixed(0)}</Text>
+                <Text style={[styles.splitLabel, { color: D.muted }]}>Total: KES {total.toFixed(0)}</Text>
                 <RNTextInput
                   placeholder="Cash amount"
+                  placeholderTextColor={D.muted}
                   value={splitCash}
                   onChangeText={(v) => {
                     setSplitCash(v);
@@ -798,20 +901,22 @@ export default function POSScreen() {
                     setSplitMpesa(remaining > 0 ? remaining.toFixed(0) : '');
                   }}
                   keyboardType="decimal-pad"
-                  style={styles.mpesaInput}
+                  style={[styles.darkInput, { color: D.text, borderColor: D.border, backgroundColor: D.elevated }]}
                 />
                 <RNTextInput
                   placeholder="M-Pesa amount"
+                  placeholderTextColor={D.muted}
                   value={splitMpesa}
                   onChangeText={setSplitMpesa}
                   keyboardType="decimal-pad"
-                  style={styles.mpesaInput}
+                  style={[styles.darkInput, { color: D.text, borderColor: D.border, backgroundColor: D.elevated }]}
                 />
                 <RNTextInput
                   placeholder="M-Pesa Transaction Code"
+                  placeholderTextColor={D.muted}
                   value={splitMpesaRef}
                   onChangeText={setSplitMpesaRef}
-                  style={styles.mpesaInput}
+                  style={[styles.darkInput, { color: D.text, borderColor: D.border, backgroundColor: D.elevated }]}
                   autoCapitalize="characters"
                 />
               </View>
@@ -819,48 +924,51 @@ export default function POSScreen() {
 
             <RNTextInput
               placeholder="Order Discount (KES)"
+              placeholderTextColor={D.muted}
               value={discount}
               onChangeText={setDiscount}
               keyboardType="numeric"
-              style={styles.mpesaInput}
+              style={[styles.darkInput, { color: D.text, borderColor: D.border, backgroundColor: D.elevated }]}
             />
 
             {selectedCustomer && loyaltyBalance > 0 && (
               <View>
-                <Text style={styles.loyaltyInputLabel}>Redeem Loyalty Points (max {loyaltyBalance}, = KES {(loyaltyBalance * KES_PER_POINT).toFixed(0)})</Text>
+                <Text style={[styles.loyaltyInputLabel, { color: D.warning }]}>Redeem points (max {loyaltyBalance} = KES {(loyaltyBalance * KES_PER_POINT).toFixed(0)})</Text>
                 <RNTextInput
                   placeholder="Points to redeem"
+                  placeholderTextColor={D.muted}
                   value={redeemPoints}
                   onChangeText={setRedeemPoints}
                   keyboardType="numeric"
-                  style={styles.mpesaInput}
+                  style={[styles.darkInput, { color: D.text, borderColor: D.border, backgroundColor: D.elevated }]}
                 />
               </View>
             )}
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setCheckoutVisible(false)}>Cancel</Button>
-            <Button mode="contained" onPress={handleConfirmSale} loading={mutation.isPending} disabled={mutation.isPending}>
+            <Button textColor={D.muted} onPress={() => setCheckoutVisible(false)}>Cancel</Button>
+            <Button mode="contained" buttonColor={D.accent} onPress={handleConfirmSale} loading={mutation.isPending} disabled={mutation.isPending}>
               Confirm Sale
             </Button>
           </Dialog.Actions>
         </Dialog>
-        {/* Post-sale Share Receipt Dialog */}
-        <Dialog visible={shareDialogOpen} onDismiss={() => setShareDialogOpen(false)}>
-          <Dialog.Title>Share Receipt</Dialog.Title>
+
+        {/* Post-sale Share */}
+        <Dialog visible={shareDialogOpen} onDismiss={() => setShareDialogOpen(false)} style={{ backgroundColor: D.surface }}>
+          <Dialog.Title style={{ color: D.text }}>Share Receipt</Dialog.Title>
           <Dialog.Content>
-            <Text style={{ color: '#555', marginBottom: 16 }}>
+            <Text style={{ color: D.muted, marginBottom: 16 }}>
               Send receipt to {lastSale?.customer_name ?? 'customer'} at {lastSale?.customerPhone}?
             </Text>
             <Button mode="contained" icon="whatsapp" style={{ marginBottom: 10, backgroundColor: '#25D366' }} onPress={shareViaWhatsApp}>
               Send via WhatsApp
             </Button>
-            <Button mode="outlined" icon="message-text" onPress={shareViaSMS}>
+            <Button mode="outlined" icon="message-text" textColor={D.accent} style={{ borderColor: D.accent }} onPress={shareViaSMS}>
               Send via SMS
             </Button>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setShareDialogOpen(false)}>Skip</Button>
+            <Button textColor={D.muted} onPress={() => setShareDialogOpen(false)}>Skip</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -869,61 +977,76 @@ export default function POSScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5f5f5' },
-  container: { flex: 1, flexDirection: 'row' },
-  header: { backgroundColor: brand.primary },
-  headerTitle: { color: '#fff', fontWeight: '700' },
-  cashierBadge: { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginRight: 4 },
-  left: { flex: 3, borderRightWidth: 1, borderRightColor: '#e0e0e0' },
-  right: { flex: 2, backgroundColor: '#fff', padding: 12 },
-  searchbar: { margin: 10, elevation: 0, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e0e0e0' },
-  catList: { maxHeight: 48 },
-  catChip: { backgroundColor: '#f0f0f0' },
-  catText: { fontSize: 12 },
-  productGrid: { padding: 10, gap: 10 },
-  productCard: { flex: 1, backgroundColor: '#fff', borderRadius: 10, padding: 12, alignItems: 'center', elevation: 1 },
-  productCardPressed: { backgroundColor: '#f0fdf4' },
-  productName: { fontSize: 12, textAlign: 'center', marginTop: 6, color: '#222' },
-  productPrice: { fontSize: 14, fontWeight: '700', color: brand.primary, marginTop: 4 },
-  stockBadge: { fontSize: 10, color: '#666', marginTop: 2 },
-  lowStock: { color: '#e53935' },
-  cartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  cartTitle: { fontSize: 16, fontWeight: '700', color: '#111' },
-  customerBtn: { fontSize: 12, color: brand.primary, fontWeight: '600' },
-  loyaltyBanner: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fffbeb', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, marginBottom: 6 },
-  loyaltyText: { fontSize: 12, color: '#92400e', fontWeight: '600' },
-  cartItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  cartItemName: { fontSize: 12, color: '#222' },
-  cartItemPrice: { fontSize: 11, color: '#888' },
-  itemDiscount: { fontSize: 11, color: '#e53935', fontWeight: '600' },
+  safe: { flex: 1 },
+  // Header
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1 },
+  headerTitle: { fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
+  cashierBadge: { fontSize: 11, marginTop: 1 },
+  iconBtn: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  // Search
+  searchWrap: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 12, marginTop: 10, marginBottom: 2, borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, height: 42 },
+  searchInput: { flex: 1, fontSize: 14, padding: 0 },
+  // Categories
+  catList: { maxHeight: 50 },
+  catChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  catText: { fontSize: 13, fontWeight: '600' },
+  // Product grid — 3 columns
+  productGrid: { padding: 10, paddingBottom: 100, gap: 10 },
+  productCard: { flex: 1, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 8, alignItems: 'center', borderWidth: 1 },
+  productIconWrap: { width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  productName: { fontSize: 12, textAlign: 'center', marginTop: 8, fontWeight: '600', lineHeight: 16 },
+  productPrice: { fontSize: 13, fontWeight: '800', marginTop: 4 },
+  stockBadge: { fontSize: 10, marginTop: 3 },
+  // Sticky cart bar
+  cartBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1 },
+  cartBarInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  cartBadge: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  cartBadgeText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  cartBarLabel: { fontSize: 11 },
+  cartBarTotal: { fontSize: 18, fontWeight: '800' },
+  // Checkout button (used in bar + cart modal)
+  checkoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 20, flex: 1, maxWidth: 160 },
+  checkoutBtnText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  // Cart modal
+  cartModal: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, marginBottom: 0, marginHorizontal: 0, position: 'absolute', bottom: 0, left: 0, right: 0 },
+  cartModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 14, borderBottomWidth: 1 },
+  cartTitle: { fontSize: 18, fontWeight: '800' },
+  cartSubtitle: { fontSize: 12, marginTop: 2 },
+  customerPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, maxWidth: 110 },
+  loyaltyBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1 },
+  loyaltyText: { fontSize: 12, fontWeight: '600' },
+  // Cart items
+  cartItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1 },
+  cartItemName: { fontSize: 13, fontWeight: '700' },
+  cartItemPrice: { fontSize: 12, marginTop: 2 },
   qtyRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 8 },
-  qtyBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: brand.primary, alignItems: 'center', justifyContent: 'center' },
-  qtyBtnText: { color: '#fff', fontSize: 18, fontWeight: '700', lineHeight: 24 },
-  qtyVal: { fontSize: 14, fontWeight: '700', marginHorizontal: 8, minWidth: 20, textAlign: 'center' },
-  cartItemTotal: { fontSize: 13, fontWeight: '700', color: '#111', minWidth: 60, textAlign: 'right' },
-  emptyCart: { alignItems: 'center', paddingTop: 40 },
-  emptyCartText: { color: '#ccc', marginTop: 8, fontSize: 14 },
-  emptyCartSub: { color: '#ddd', fontSize: 11, marginTop: 4 },
-  totals: { borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 10 },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  totalLabel: { fontSize: 13, color: '#666' },
-  totalVal: { fontSize: 13, color: '#333' },
-  grandTotal: { paddingTop: 8, borderTopWidth: 1, borderTopColor: '#eee', marginTop: 4 },
-  grandLabel: { fontSize: 16, fontWeight: '800', color: '#111' },
-  grandVal: { fontSize: 16, fontWeight: '800', color: brand.primary },
-  cartActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  holdBtn: { flex: 1, borderColor: '#ccc' },
-  checkoutBtn: { flex: 2, borderRadius: 10, backgroundColor: brand.primary },
-  mpesaInput: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10, marginTop: 10, fontSize: 14 },
+  qtyBtn: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  qtyBtnText: { fontSize: 18, fontWeight: '700', lineHeight: 24 },
+  qtyVal: { fontSize: 15, fontWeight: '800', marginHorizontal: 8, minWidth: 22, textAlign: 'center' },
+  cartItemTotal: { fontSize: 13, fontWeight: '700', minWidth: 70, textAlign: 'right' },
+  // Totals
+  cartModalTotals: { paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1 },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
+  totalLabel: { fontSize: 13 },
+  totalVal: { fontSize: 13, fontWeight: '600' },
+  grandTotalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginTop: 8, borderWidth: 1 },
+  grandLabel: { fontSize: 13, fontWeight: '700', letterSpacing: 1 },
+  grandVal: { fontSize: 22, fontWeight: '900' },
+  // Cart modal actions
+  cartActions: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 12, paddingVertical: 12, borderWidth: 1 },
+  actionBtnText: { fontSize: 13, fontWeight: '700' },
+  // Dialogs / inputs
+  darkInput: { borderWidth: 1, borderRadius: 10, padding: 12, marginTop: 10, fontSize: 14 },
   stkRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
-  splitLabel: { fontSize: 13, color: '#555', marginTop: 8, fontWeight: '600' },
-  checkoutCustomer: { fontSize: 12, color: '#555', marginBottom: 10, backgroundColor: '#f5f5f5', padding: 8, borderRadius: 6 },
-  loyaltyInputLabel: { fontSize: 12, color: '#92400e', marginTop: 8, marginBottom: 2 },
-  customerRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  customerName: { fontSize: 14, fontWeight: '600', color: '#111' },
-  customerPhone: { fontSize: 12, color: '#888' },
-  customerPoints: { fontSize: 12, color: '#f59e0b', fontWeight: '600' },
-  holdRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  holdLabel: { fontSize: 14, fontWeight: '600', color: '#111' },
-  holdSub: { fontSize: 12, color: '#888', marginTop: 2 },
+  splitLabel: { fontSize: 13, marginTop: 8, fontWeight: '600' },
+  checkoutCustomer: { borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1 },
+  loyaltyInputLabel: { fontSize: 12, marginTop: 8, marginBottom: 2, fontWeight: '600' },
+  customerRow: { paddingVertical: 12, borderBottomWidth: 1 },
+  customerName: { fontSize: 14, fontWeight: '600' },
+  customerPhone: { fontSize: 12 },
+  customerPoints: { fontSize: 12, fontWeight: '600' },
+  holdRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1 },
+  holdLabel: { fontSize: 14, fontWeight: '600' },
+  holdSub: { fontSize: 12, marginTop: 2 },
 });

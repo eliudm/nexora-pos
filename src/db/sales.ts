@@ -6,6 +6,7 @@ export interface CartItem {
   product_name: string;
   qty: number;
   unit_price: number;
+  cost_price: number;
   discount: number;
   vat_rate: number;
   vat_amount: number;
@@ -66,10 +67,12 @@ export const salesQueries = {
     },
   ): Promise<number> => {
     const db = await getDb();
+    // subtotal = sum of item totals (VAT-inclusive), after item-level discounts
     const subtotal = items.reduce((s, i) => s + i.unit_price * i.qty - i.discount, 0);
+    // taxAmount is extracted VAT for KRA reporting only — it is already within subtotal
     const taxAmount = items.reduce((s, i) => s + i.vat_amount, 0);
     const discount = (opts.discount ?? 0) + (opts.loyaltyDiscount ?? 0);
-    const total = subtotal + taxAmount - discount;
+    const total = subtotal - discount;
     const invoiceNo = await nextInvoiceNo();
 
     const splitCash = opts.splitPayment?.cash ?? 0;
@@ -89,10 +92,10 @@ export const salesQueries = {
 
     for (const item of items) {
       await db.runAsync(
-        `INSERT INTO sale_items (sale_id, product_id, product_name, qty, unit_price, discount, vat_rate, vat_amount, total)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO sale_items (sale_id, product_id, product_name, qty, unit_price, cost_price, discount, vat_rate, vat_amount, total)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [saleId, item.product_id, item.product_name, item.qty,
-         item.unit_price, item.discount, item.vat_rate, item.vat_amount, item.total],
+         item.unit_price, item.cost_price ?? 0, item.discount, item.vat_rate, item.vat_amount, item.total],
       );
       // Deduct stock and log
       const prod = await db.getFirstAsync<{ stock_qty: number; name: string; track_stock: number }>(

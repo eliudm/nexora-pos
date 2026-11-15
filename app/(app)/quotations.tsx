@@ -9,7 +9,7 @@ import { productQueries, Product } from '../../src/db/products';
 import { customerQueries, Customer } from '../../src/db/customers';
 import { CartItem } from '../../src/db/sales';
 import { useSession } from '../../src/context/session';
-import { brand } from '../../src/theme';
+import { useTheme } from '../../src/context/theme';
 import dayjs from 'dayjs';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -20,6 +20,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function QuotationsScreen() {
   const qc = useQueryClient();
   const { user } = useSession();
+  const { colors: C } = useTheme();
   const [createVisible, setCreateVisible] = useState(false);
   const [detailQuote, setDetailQuote] = useState<Quotation | null>(null);
   const [convertVisible, setConvertVisible] = useState(false);
@@ -88,11 +89,12 @@ export default function QuotationsScreen() {
   const addProduct = (product: Product) => {
     setItems((prev) => {
       if (prev.find((i) => i.product_id === product.id)) return prev;
-      const vatAmt = product.price * (product.vat_rate / 100);
+      const rate = product.vat_rate / 100;
+      const vatAmt = product.price * rate / (1 + rate);
       return [...prev, {
         product_id: product.id, product_name: product.name, qty: 1,
-        unit_price: product.price, discount: 0, vat_rate: product.vat_rate,
-        vat_amount: vatAmt, total: product.price + vatAmt,
+        unit_price: product.price, cost_price: product.cost, discount: 0, vat_rate: product.vat_rate,
+        vat_amount: vatAmt, total: product.price,
       }];
     });
     setProductPickerOpen(false);
@@ -101,8 +103,9 @@ export default function QuotationsScreen() {
   const updateQty = (productId: number, qty: number) => {
     setItems((prev) => prev.map((i) => {
       if (i.product_id !== productId) return i;
-      const vatAmt = i.unit_price * qty * (i.vat_rate / 100);
-      return { ...i, qty, vat_amount: vatAmt, total: i.unit_price * qty + vatAmt };
+      const rate = i.vat_rate / 100;
+      const vatAmt = i.unit_price * qty * rate / (1 + rate);
+      return { ...i, qty, vat_amount: vatAmt, total: i.unit_price * qty - i.discount };
     }));
   };
 
@@ -112,6 +115,7 @@ export default function QuotationsScreen() {
     const full = await quotationQueries.getById(q.id);
     setDetailQuote(full);
   };
+  const styles = makeStyles(C);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -280,31 +284,33 @@ export default function QuotationsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: brand.primary },
-  headerTitle: { color: '#fff', fontWeight: '700' },
-  list: { padding: 12, gap: 8, paddingBottom: 80 },
-  card: { borderRadius: 10 },
-  cardContent: { flexDirection: 'row', alignItems: 'center' },
-  quoteNo: { fontSize: 14, fontWeight: '700', color: '#111' },
-  quoteCust: { fontSize: 12, color: '#666', marginTop: 2 },
-  quoteDate: { fontSize: 11, color: '#aaa', marginTop: 2 },
-  quoteTotal: { fontSize: 14, fontWeight: '700', color: brand.primary },
-  empty: { alignItems: 'center', paddingTop: 60 },
-  emptyText: { color: '#ccc', marginTop: 8, fontSize: 14 },
-  fab: { position: 'absolute', bottom: 24, right: 24, backgroundColor: brand.primary },
-  dialog: { marginHorizontal: 8 },
-  input: { marginBottom: 10, backgroundColor: '#fff' },
-  itemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  qtyRow: { flexDirection: 'row', alignItems: 'center' },
-  qtyVal: { fontSize: 14, fontWeight: '700', marginHorizontal: 4 },
-  itemTotal: { fontSize: 13, fontWeight: '600', color: brand.primary, minWidth: 70, textAlign: 'right' },
-  totalLine: { fontSize: 15, fontWeight: '700', color: brand.primary, textAlign: 'right', marginTop: 10 },
-  discountLine: { fontSize: 13, color: '#e53935', textAlign: 'right', marginTop: 4 },
-  detailMeta: { fontSize: 13, color: '#555', marginBottom: 4 },
-  detailItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  detailQty: { fontSize: 12, color: '#888', width: 80 },
-  detailTotal: { fontSize: 13, fontWeight: '600', color: '#333', width: 70, textAlign: 'right' },
-  detailNote: { fontSize: 12, color: '#777', fontStyle: 'italic', marginTop: 8 },
-});
+function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: C.bg },
+    header: { backgroundColor: C.accent },
+    headerTitle: { color: '#fff', fontWeight: '700' },
+    list: { padding: 12, gap: 8, paddingBottom: 80 },
+    card: { borderRadius: 10 },
+    cardContent: { flexDirection: 'row', alignItems: 'center' },
+    quoteNo: { fontSize: 14, fontWeight: '700', color: C.text },
+    quoteCust: { fontSize: 12, color: C.muted, marginTop: 2 },
+    quoteDate: { fontSize: 11, color: C.muted, marginTop: 2 },
+    quoteTotal: { fontSize: 14, fontWeight: '700', color: C.accent },
+    empty: { alignItems: 'center', paddingTop: 60 },
+    emptyText: { color: C.muted, marginTop: 8, fontSize: 14 },
+    fab: { position: 'absolute', bottom: 24, right: 24, backgroundColor: C.accent },
+    dialog: { marginHorizontal: 8 },
+    input: { marginBottom: 10 },
+    itemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: C.border },
+    qtyRow: { flexDirection: 'row', alignItems: 'center' },
+    qtyVal: { fontSize: 14, fontWeight: '700', marginHorizontal: 4 },
+    itemTotal: { fontSize: 13, fontWeight: '600', color: C.accent, minWidth: 70, textAlign: 'right' },
+    totalLine: { fontSize: 15, fontWeight: '700', color: C.accent, textAlign: 'right', marginTop: 10 },
+    discountLine: { fontSize: 13, color: C.danger, textAlign: 'right', marginTop: 4 },
+    detailMeta: { fontSize: 13, color: C.muted, marginBottom: 4 },
+    detailItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border },
+    detailQty: { fontSize: 12, color: C.muted, width: 80 },
+    detailTotal: { fontSize: 13, fontWeight: '600', color: C.text, width: 70, textAlign: 'right' },
+    detailNote: { fontSize: 12, color: C.muted, fontStyle: 'italic', marginTop: 8 },
+  });
+}

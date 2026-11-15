@@ -86,6 +86,7 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       product_name TEXT NOT NULL,
       qty REAL NOT NULL,
       unit_price REAL NOT NULL,
+      cost_price REAL DEFAULT 0,
       discount REAL DEFAULT 0,
       vat_rate REAL DEFAULT 16,
       vat_amount REAL DEFAULT 0,
@@ -314,6 +315,7 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   await safeAlter('ALTER TABLE customers ADD COLUMN loyalty_points INTEGER DEFAULT 0');
   await safeAlter('ALTER TABLE products ADD COLUMN low_stock_threshold REAL DEFAULT 0');
   await safeAlter('ALTER TABLE products ADD COLUMN reorder_qty REAL DEFAULT 0');
+  await safeAlter('ALTER TABLE sale_items ADD COLUMN cost_price REAL DEFAULT 0');
 
   // Seed default admin if none exists
   const userCount = await db.getFirstAsync<{ c: number }>('SELECT COUNT(*) as c FROM users');

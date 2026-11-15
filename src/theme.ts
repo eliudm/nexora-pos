@@ -1,20 +1,22 @@
-import { MD3LightTheme } from 'react-native-paper';
+import { MD3DarkTheme } from 'react-native-paper';
 
 export const paperTheme = {
-  ...MD3LightTheme,
+  ...MD3DarkTheme,
   colors: {
-    ...MD3LightTheme.colors,
+    ...MD3DarkTheme.colors,
     primary: '#1db8a0',
     onPrimary: '#ffffff',
-    primaryContainer: '#d6f3ee',
+    primaryContainer: '#0d3d36',
     secondary: '#6f67ff',
     onSecondary: '#ffffff',
-    secondaryContainer: '#e6e4ff',
-    background: '#f5f5f5',
-    surface: '#ffffff',
-    surfaceVariant: '#f0eef7',
-    error: '#d4380d',
-    outline: '#d9d4e8',
+    secondaryContainer: '#1e1c3a',
+    background: '#0d0d14',
+    surface: '#16161f',
+    surfaceVariant: '#1e1e2a',
+    error: '#ff4d4d',
+    outline: '#262635',
+    onSurface: '#e8e8f2',
+    onBackground: '#e8e8f2',
   },
 };
 
@@ -23,11 +25,13 @@ export const brand = {
   secondary: '#6f67ff',
   gradientStart: '#6f67ff',
   gradientEnd: '#1db8a0',
-  textDark: '#2f2749',
-  textMuted: '#6b6485',
-  danger: '#d4380d',
-  warning: '#fa8c16',
-  success: '#52c41a',
-  surface: '#ffffff',
-  bg: '#f5f5f5',
+  textDark: '#e8e8f2',
+  textMuted: '#8888aa',
+  danger: '#ff4d4d',
+  warning: '#f59e0b',
+  success: '#22c55e',
+  surface: '#16161f',
+  surfaceElevated: '#1e1e2a',
+  border: '#262635',
+  bg: '#0d0d14',
 };

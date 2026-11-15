@@ -86,9 +86,8 @@ export function buildReceiptText(sale: ReceiptSale, biz: BusinessInfo): string {
 
   r += divider();
 
-  // Totals
+  // Totals — prices are VAT-inclusive; VAT shown as informational after TOTAL
   r += `[L]${pad('Subtotal', `KES ${sale.subtotal.toFixed(0)}`)}\n`;
-  r += `[L]${pad('VAT (16%)', `KES ${sale.tax_amount.toFixed(0)}`)}\n`;
   if (sale.discount > 0) {
     r += `[L]${pad('Discount', `-KES ${sale.discount.toFixed(0)}`)}\n`;
   }
@@ -96,6 +95,7 @@ export function buildReceiptText(sale: ReceiptSale, biz: BusinessInfo): string {
   r += divider('=');
   r += `[L]<b>${pad('TOTAL', `KES ${sale.total.toFixed(0)}`)}</b>\n`;
   r += divider('=');
+  r += `[L]${pad('Incl. VAT (16%)', `KES ${sale.tax_amount.toFixed(0)}`)}\n`;
 
   // Payment
   if (sale.payment_method === 'SPLIT') {
@@ -165,9 +165,9 @@ export function buildReceiptHtml(sale: ReceiptSale, biz: BusinessInfo): string {
       <hr/>
       <table style="width:100%">
         <tr><td>Subtotal</td><td style="text-align:right">KES ${sale.subtotal.toFixed(0)}</td></tr>
-        <tr><td>VAT (16%)</td><td style="text-align:right">KES ${sale.tax_amount.toFixed(0)}</td></tr>
         ${sale.discount > 0 ? `<tr><td>Discount</td><td style="text-align:right">-KES ${sale.discount.toFixed(0)}</td></tr>` : ''}
         <tr style="border-top:2px solid #333;font-weight:bold"><td>TOTAL</td><td style="text-align:right">KES ${sale.total.toFixed(0)}</td></tr>
+        <tr style="color:#666;font-size:11px"><td>Incl. VAT (16%)</td><td style="text-align:right">KES ${sale.tax_amount.toFixed(0)}</td></tr>
         <tr><td>Payment</td><td style="text-align:right">${sale.payment_method}</td></tr>
         ${sale.mpesa_ref ? `<tr><td>M-Pesa Ref</td><td style="text-align:right">${sale.mpesa_ref}</td></tr>` : ''}
       </table>

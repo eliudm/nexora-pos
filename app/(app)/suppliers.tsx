@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supplierQueries, Supplier } from '../../src/db/suppliers';
-import { brand } from '../../src/theme';
+import { useTheme } from '../../src/context/theme';
 
 const EMPTY: Omit<Supplier, 'id' | 'created_at'> = {
   name: '', phone: null, email: null, address: null, notes: null,
@@ -13,6 +13,7 @@ const EMPTY: Omit<Supplier, 'id' | 'created_at'> = {
 
 export default function SuppliersScreen() {
   const qc = useQueryClient();
+  const { colors: C } = useTheme();
   const [search, setSearch] = useState('');
   const [dialogVisible, setDialogVisible] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
@@ -62,6 +63,7 @@ export default function SuppliersScreen() {
       { text: 'Delete', style: 'destructive', onPress: () => deleteMutation.mutate(s.id) },
     ]);
   };
+  const styles = makeStyles(C);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -84,7 +86,7 @@ export default function SuppliersScreen() {
           <Card style={styles.card} onPress={() => openEdit(item)}>
             <Card.Content style={styles.cardContent}>
               <View style={styles.supplierIcon}>
-                <MaterialCommunityIcons name="truck" size={24} color={brand.primary} />
+                <MaterialCommunityIcons name="truck" size={24} color={C.accent} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{item.name}</Text>
@@ -126,19 +128,21 @@ export default function SuppliersScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: brand.primary },
-  headerTitle: { color: '#fff', fontWeight: '700' },
-  searchbar: { margin: 12, elevation: 0, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e0e0e0' },
-  list: { padding: 12, gap: 8, paddingBottom: 80 },
-  card: { borderRadius: 10 },
-  cardContent: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  supplierIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: brand.primary + '20', alignItems: 'center', justifyContent: 'center' },
-  name: { fontSize: 15, fontWeight: '700', color: '#111' },
-  detail: { fontSize: 12, color: '#777', marginTop: 2 },
-  empty: { alignItems: 'center', paddingTop: 60 },
-  emptyText: { color: '#ccc', marginTop: 8, fontSize: 14 },
-  fab: { position: 'absolute', bottom: 24, right: 24, backgroundColor: brand.primary },
-  input: { marginBottom: 10, backgroundColor: '#fff' },
-});
+function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: C.bg },
+    header: { backgroundColor: C.accent },
+    headerTitle: { color: '#fff', fontWeight: '700' },
+    searchbar: { margin: 12, elevation: 0, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+    list: { padding: 12, gap: 8, paddingBottom: 80 },
+    card: { borderRadius: 10 },
+    cardContent: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    supplierIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.accent + '22', alignItems: 'center', justifyContent: 'center' },
+    name: { fontSize: 15, fontWeight: '700', color: C.text },
+    detail: { fontSize: 12, color: C.muted, marginTop: 2 },
+    empty: { alignItems: 'center', paddingTop: 60 },
+    emptyText: { color: C.muted, marginTop: 8, fontSize: 14 },
+    fab: { position: 'absolute', bottom: 24, right: 24, backgroundColor: C.accent },
+    input: { marginBottom: 10 },
+  });
+}

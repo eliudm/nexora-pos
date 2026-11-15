@@ -7,7 +7,7 @@ import { router } from 'expo-router';
 import { BarChart, LineChart, PieChart } from 'react-native-gifted-charts';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { salesQueries } from '../../src/db/sales';
-import { brand } from '../../src/theme';
+import { useTheme } from '../../src/context/theme';
 import dayjs from 'dayjs';
 
 type Period = '7d' | '14d' | '30d';
@@ -25,6 +25,7 @@ const PAYMENT_COLORS: Record<string, string> = {
 const CAT_COLORS = ['#1db8a0', '#6f67ff', '#f59e0b', '#e53935', '#22c55e', '#3b82f6', '#ec4899', '#64748b'];
 
 export default function AnalyticsScreen() {
+  const { colors: C } = useTheme();
   const [period, setPeriod] = useState<Period>('7d');
 
   const days = period === '7d' ? 7 : period === '14d' ? 14 : 30;
@@ -96,7 +97,7 @@ export default function AnalyticsScreen() {
     return Array.from({ length: 24 }, (_, h) => ({
       value: map.get(h) ?? 0,
       label: h % 4 === 0 ? `${h}h` : '',
-      frontColor: h >= 8 && h <= 20 ? brand.primary : '#d1d5db',
+      frontColor: h >= 8 && h <= 20 ? C.accent : C.border,
     }));
   })();
 
@@ -110,6 +111,7 @@ export default function AnalyticsScreen() {
 
   // ---- Top products bars ----
   const maxProductRev = Math.max(...(topProducts ?? []).map(p => p.total_revenue), 1);
+  const styles = makeStyles(C);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -139,7 +141,7 @@ export default function AnalyticsScreen() {
         {/* ---- KPI Row ---- */}
         <View style={styles.kpiRow}>
           <View style={styles.kpiCard}>
-            <MaterialCommunityIcons name="cash-multiple" size={22} color={brand.primary} />
+            <MaterialCommunityIcons name="cash-multiple" size={22} color={C.accent} />
             <Text style={styles.kpiVal}>{fmt(totalRevenue)}</Text>
             <Text style={styles.kpiLabel}>Revenue</Text>
           </View>
@@ -171,15 +173,15 @@ export default function AnalyticsScreen() {
                 data={trendData}
                 width={CHART_W - 24}
                 height={160}
-                color={brand.primary}
+                color={C.accent}
                 thickness={2.5}
-                startFillColor={brand.primary}
+                startFillColor={C.accent}
                 endFillColor="transparent"
                 startOpacity={0.18}
                 endOpacity={0}
                 areaChart
                 hideDataPoints={days > 14}
-                dataPointsColor={brand.primary}
+                dataPointsColor={C.accent}
                 dataPointsRadius={4}
                 xAxisColor="#e0e0e0"
                 yAxisColor="transparent"
@@ -366,45 +368,47 @@ export default function AnalyticsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: brand.primary },
-  headerTitle: { color: '#fff', fontWeight: '700' },
-  periodRow: { flexDirection: 'row', gap: 8, padding: 12, paddingBottom: 4 },
-  periodChip: { backgroundColor: '#f0f0f0' },
-  periodChipActive: { backgroundColor: brand.primary },
-  periodText: { fontSize: 12 },
-  periodTextActive: { color: '#fff', fontWeight: '600' },
-  scroll: { padding: 12, paddingTop: 8 },
-  kpiRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  kpiCard: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 10, alignItems: 'center', elevation: 1 },
-  kpiVal: { fontSize: 14, fontWeight: '800', color: brand.primary, marginTop: 4 },
-  kpiLabel: { fontSize: 10, color: '#888', marginTop: 2, textAlign: 'center' },
-  card: { borderRadius: 14, marginBottom: 12, overflow: 'hidden' },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: '#111' },
-  empty: { alignItems: 'center', paddingVertical: 24 },
-  emptyText: { color: '#ccc', fontSize: 13 },
-  chartNote: { fontSize: 10, color: '#aaa', marginTop: 6 },
-  pieRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  legend: { flex: 1, gap: 8 },
-  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot: { width: 10, height: 10, borderRadius: 5 },
-  legendLabel: { fontSize: 12, color: '#333', fontWeight: '600' },
-  legendVal: { fontSize: 11, color: '#888' },
-  legendPct: { fontSize: 12, fontWeight: '700', color: '#555', minWidth: 32, textAlign: 'right' },
-  productRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 },
-  rank: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-  rankNum: { fontSize: 12, fontWeight: '800' },
-  productName: { fontSize: 13, color: '#222', fontWeight: '600', marginBottom: 4 },
-  barBg: { height: 6, backgroundColor: '#f0f0f0', borderRadius: 3, overflow: 'hidden' },
-  bar: { height: '100%', borderRadius: 3 },
-  productRight: { alignItems: 'flex-end', minWidth: 70 },
-  productRev: { fontSize: 13, fontWeight: '700', color: brand.primary },
-  productQty: { fontSize: 10, color: '#aaa', marginTop: 2 },
-  cashierRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
-  avatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  cashierName: { fontSize: 13, fontWeight: '600', color: '#222' },
-  cashierRev: { fontSize: 13, fontWeight: '700', color: brand.primary },
-  cashierTx: { fontSize: 10, color: '#aaa', marginTop: 3 },
-});
+function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: C.bg },
+    header: { backgroundColor: C.accent },
+    headerTitle: { color: '#fff', fontWeight: '700' },
+    periodRow: { flexDirection: 'row', gap: 8, padding: 12, paddingBottom: 4 },
+    periodChip: { backgroundColor: C.elevated },
+    periodChipActive: { backgroundColor: C.accent },
+    periodText: { fontSize: 12 },
+    periodTextActive: { color: '#fff', fontWeight: '600' },
+    scroll: { padding: 12, paddingTop: 8 },
+    kpiRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+    kpiCard: { flex: 1, backgroundColor: C.surface, borderRadius: 12, padding: 10, alignItems: 'center', elevation: 1 },
+    kpiVal: { fontSize: 14, fontWeight: '800', color: C.accent, marginTop: 4 },
+    kpiLabel: { fontSize: 10, color: C.muted, marginTop: 2, textAlign: 'center' },
+    card: { borderRadius: 14, marginBottom: 12, overflow: 'hidden' },
+    cardTitle: { fontSize: 15, fontWeight: '700', color: C.text },
+    empty: { alignItems: 'center', paddingVertical: 24 },
+    emptyText: { color: C.muted, fontSize: 13 },
+    chartNote: { fontSize: 10, color: C.muted, marginTop: 6 },
+    pieRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+    legend: { flex: 1, gap: 8 },
+    legendRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    legendDot: { width: 10, height: 10, borderRadius: 5 },
+    legendLabel: { fontSize: 12, color: C.text, fontWeight: '600' },
+    legendVal: { fontSize: 11, color: C.muted },
+    legendPct: { fontSize: 12, fontWeight: '700', color: C.muted, minWidth: 32, textAlign: 'right' },
+    productRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 },
+    rank: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+    rankNum: { fontSize: 12, fontWeight: '800' },
+    productName: { fontSize: 13, color: C.text, fontWeight: '600', marginBottom: 4 },
+    barBg: { height: 6, backgroundColor: C.elevated, borderRadius: 3, overflow: 'hidden' },
+    bar: { height: '100%', borderRadius: 3 },
+    productRight: { alignItems: 'flex-end', minWidth: 70 },
+    productRev: { fontSize: 13, fontWeight: '700', color: C.accent },
+    productQty: { fontSize: 10, color: C.muted, marginTop: 2 },
+    cashierRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+    avatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+    avatarText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+    cashierName: { fontSize: 13, fontWeight: '600', color: C.text },
+    cashierRev: { fontSize: 13, fontWeight: '700', color: C.accent },
+    cashierTx: { fontSize: 10, color: C.muted, marginTop: 3 },
+  });
+}

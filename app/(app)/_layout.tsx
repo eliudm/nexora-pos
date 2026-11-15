@@ -1,7 +1,7 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { brand } from '../../src/theme';
+import { useTheme } from '../../src/context/theme';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -10,12 +10,20 @@ function TabIcon({ name, color, size }: { name: IconName; color: string; size: n
 }
 
 export default function AppLayout() {
+  const { colors } = useTheme();
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: brand.primary,
-        tabBarInactiveTintColor: '#999',
-        tabBarStyle: { height: 64, paddingBottom: 8, paddingTop: 4 },
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.muted,
+        tabBarStyle: {
+          height: 64,
+          paddingBottom: 8,
+          paddingTop: 4,
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+        },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         headerShown: false,
       }}

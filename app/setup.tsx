@@ -4,7 +4,7 @@ import { Text, TextInput, Button, HelperText, Appbar } from 'react-native-paper'
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { setSetting } from '../src/db/settings';
-import { brand } from '../src/theme';
+import { useTheme } from '../src/context/theme';
 
 interface FormData {
   business_name: string;
@@ -27,6 +27,7 @@ const INITIAL: FormData = {
 };
 
 export default function SetupScreen() {
+  const { colors: C } = useTheme();
   const [form, setForm] = useState<FormData>(INITIAL);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Partial<FormData>>({});
@@ -62,6 +63,7 @@ export default function SetupScreen() {
       setSaving(false);
     }
   };
+  const styles = makeStyles(C);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -163,15 +165,17 @@ export default function SetupScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#fff' },
-  header: { backgroundColor: brand.primary },
-  headerTitle: { color: '#fff', fontWeight: '700' },
-  scroll: { padding: 20, paddingBottom: 48 },
-  subtitle: { color: '#666', fontSize: 14, marginBottom: 24 },
-  section: { fontSize: 13, fontWeight: '700', color: brand.primary, textTransform: 'uppercase', letterSpacing: 1, marginTop: 16, marginBottom: 8 },
-  input: { marginBottom: 4, backgroundColor: '#fff' },
-  saveBtn: { marginTop: 32, borderRadius: 10, backgroundColor: brand.primary },
-  btnContent: { height: 50 },
-  btnLabel: { fontSize: 16, fontWeight: '700' },
-});
+function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: C.bg },
+    header: { backgroundColor: C.accent },
+    headerTitle: { color: '#fff', fontWeight: '700' },
+    scroll: { padding: 20, paddingBottom: 48 },
+    subtitle: { color: C.muted, fontSize: 14, marginBottom: 24 },
+    section: { fontSize: 13, fontWeight: '700', color: C.accent, textTransform: 'uppercase', letterSpacing: 1, marginTop: 16, marginBottom: 8 },
+    input: { marginBottom: 4 },
+    saveBtn: { marginTop: 32, borderRadius: 10, backgroundColor: C.accent },
+    btnContent: { height: 50 },
+    btnLabel: { fontSize: 16, fontWeight: '700' },
+  });
+}

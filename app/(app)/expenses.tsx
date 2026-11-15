@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { expenseQueries, Expense, EXPENSE_CATEGORIES } from '../../src/db/expenses';
 import { useSession } from '../../src/context/session';
-import { brand } from '../../src/theme';
+import { useTheme } from '../../src/context/theme';
 import dayjs from 'dayjs';
 
 type Period = 'today' | 'week' | 'month';
@@ -14,6 +14,7 @@ type Period = 'today' | 'week' | 'month';
 export default function ExpensesScreen() {
   const qc = useQueryClient();
   const { user } = useSession();
+  const { colors: C } = useTheme();
   const [period, setPeriod] = useState<Period>('today');
   const [dialogVisible, setDialogVisible] = useState(false);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
@@ -70,6 +71,7 @@ export default function ExpensesScreen() {
     mutationFn: (id: number) => expenseQueries.delete(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); qc.invalidateQueries({ queryKey: ['expense-summary'] }); },
   });
+  const styles = makeStyles(C);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -108,7 +110,7 @@ export default function ExpensesScreen() {
           <Card style={styles.card}>
             <Card.Content style={styles.cardRow}>
               <View style={styles.catIcon}>
-                <MaterialCommunityIcons name="receipt" size={20} color={brand.primary} />
+                <MaterialCommunityIcons name="receipt" size={20} color={C.accent} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.expCat}>{item.category}</Text>
@@ -189,31 +191,33 @@ export default function ExpensesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: brand.primary },
-  headerTitle: { color: '#fff', fontWeight: '700' },
-  tabs: { flexDirection: 'row', padding: 12, gap: 8 },
-  tab: { flex: 1, backgroundColor: '#f0f0f0' },
-  tabActive: { backgroundColor: brand.primary },
-  tabText: { fontSize: 12, textAlign: 'center' },
-  totalCard: { alignItems: 'center', paddingVertical: 16, backgroundColor: '#fff', marginHorizontal: 12, borderRadius: 12, elevation: 1, marginBottom: 8 },
-  totalAmount: { fontSize: 28, fontWeight: '800', color: '#e53935' },
-  totalLabel: { fontSize: 12, color: '#888', marginTop: 4 },
-  summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 12, marginBottom: 8 },
-  summaryChip: { backgroundColor: '#f5f5f5' },
-  list: { padding: 12, gap: 8, paddingBottom: 80 },
-  card: { borderRadius: 10 },
-  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  catIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: brand.primary + '20', alignItems: 'center', justifyContent: 'center' },
-  expCat: { fontSize: 14, fontWeight: '700', color: '#111' },
-  expDesc: { fontSize: 12, color: '#666', marginTop: 2 },
-  expDate: { fontSize: 11, color: '#aaa', marginTop: 2 },
-  expAmount: { fontSize: 15, fontWeight: '700', color: '#e53935' },
-  empty: { alignItems: 'center', paddingTop: 60 },
-  emptyText: { color: '#ccc', marginTop: 8, fontSize: 14 },
-  fab: { position: 'absolute', bottom: 24, right: 24, backgroundColor: brand.primary },
-  input: { marginBottom: 10, backgroundColor: '#fff' },
-  pmRow: { flexDirection: 'row', gap: 8 },
-  pmChip: { flex: 1 },
-});
+function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: C.bg },
+    header: { backgroundColor: C.accent },
+    headerTitle: { color: '#fff', fontWeight: '700' },
+    tabs: { flexDirection: 'row', padding: 12, gap: 8 },
+    tab: { flex: 1, backgroundColor: C.elevated },
+    tabActive: { backgroundColor: C.accent },
+    tabText: { fontSize: 12, textAlign: 'center' },
+    totalCard: { alignItems: 'center', paddingVertical: 16, backgroundColor: C.surface, marginHorizontal: 12, borderRadius: 12, elevation: 1, marginBottom: 8 },
+    totalAmount: { fontSize: 28, fontWeight: '800', color: C.danger },
+    totalLabel: { fontSize: 12, color: C.muted, marginTop: 4 },
+    summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 12, marginBottom: 8 },
+    summaryChip: { backgroundColor: C.elevated },
+    list: { padding: 12, gap: 8, paddingBottom: 80 },
+    card: { borderRadius: 10 },
+    cardRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    catIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.accent + '22', alignItems: 'center', justifyContent: 'center' },
+    expCat: { fontSize: 14, fontWeight: '700', color: C.text },
+    expDesc: { fontSize: 12, color: C.muted, marginTop: 2 },
+    expDate: { fontSize: 11, color: C.muted, marginTop: 2 },
+    expAmount: { fontSize: 15, fontWeight: '700', color: C.danger },
+    empty: { alignItems: 'center', paddingTop: 60 },
+    emptyText: { color: C.muted, marginTop: 8, fontSize: 14 },
+    fab: { position: 'absolute', bottom: 24, right: 24, backgroundColor: C.accent },
+    input: { marginBottom: 10 },
+    pmRow: { flexDirection: 'row', gap: 8 },
+    pmChip: { flex: 1 },
+  });
+}

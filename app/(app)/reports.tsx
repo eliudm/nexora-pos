@@ -13,12 +13,13 @@ import { customerQueries } from '../../src/db/customers';
 import { cashDrawerQueries } from '../../src/db/cash_drawer';
 import { shiftQueries } from '../../src/db/shifts';
 import { getBusinessInfo } from '../../src/db/settings';
-import { brand } from '../../src/theme';
+import { useTheme } from '../../src/context/theme';
 
 type Period = 'today' | 'week' | 'month';
 type ReportTab = 'sales' | 'profit' | 'stock' | 'customers' | 'vat' | 'reconcile';
 
 export default function ReportsScreen() {
+  const { colors: C } = useTheme();
   const [period, setPeriod] = useState<Period>('today');
   const [reportTab, setReportTab] = useState<ReportTab>('sales');
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
@@ -163,6 +164,7 @@ export default function ReportsScreen() {
     await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 });
     await Sharing.shareAsync(path, { mimeType: 'text/csv', dialogTitle: 'Share Report CSV' });
   };
+  const styles = makeStyles(C);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -220,7 +222,7 @@ export default function ReportsScreen() {
 
       <ScrollView
         style={styles.scroll}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} colors={[brand.primary]} />}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} colors={[C.accent]} />}
       >
         {/* ---- Sales Report ---- */}
         {reportTab === 'sales' && (<>
@@ -270,7 +272,7 @@ export default function ReportsScreen() {
             <Card.Content>
               {topProducts!.map((p, i) => (
                 <View key={p.product_name} style={styles.productRow}>
-                  <View style={[styles.rank, { backgroundColor: i < 3 ? brand.primary : '#eee' }]}>
+                  <View style={[styles.rank, { backgroundColor: i < 3 ? C.accent : C.elevated }]}>
                     <Text style={[styles.rankNum, { color: i < 3 ? '#fff' : '#666' }]}>{i + 1}</Text>
                   </View>
                   <Text style={styles.productName} numberOfLines={1}>{p.product_name}</Text>
@@ -296,7 +298,7 @@ export default function ReportsScreen() {
                   <View key={t.date} style={styles.trendRow}>
                     <Text style={styles.trendDate}>{dayjs(t.date).format('ddd D')}</Text>
                     <View style={styles.barBg}>
-                      <View style={[styles.bar, { width: `${pct}%`, backgroundColor: brand.primary }]} />
+                      <View style={[styles.bar, { width: `${pct}%`, backgroundColor: C.accent }]} />
                     </View>
                     <Text style={styles.trendVal}>{fmt(t.revenue)}</Text>
                   </View>
@@ -321,7 +323,7 @@ export default function ReportsScreen() {
                 </View>
                 <Divider style={{ marginVertical: 12 }} />
                 {[
-                  { label: 'Revenue (incl. VAT)', value: totalRevenue, color: brand.primary },
+                  { label: 'Revenue (incl. VAT)', value: totalRevenue, color: C.accent },
                   { label: 'VAT Collected', value: -totalVAT, color: '#f59e0b' },
                   { label: 'Revenue (excl. VAT)', value: totalRevenue - totalVAT, color: '#3b82f6' },
                   { label: 'Est. Cost of Goods', value: -totalCOGS, color: '#e53935' },
@@ -349,7 +351,7 @@ export default function ReportsScreen() {
                 </View>
                 <Divider style={{ marginVertical: 12 }} />
                 <View style={styles.plRow}><Text style={styles.plLabel}>Value at Cost</Text><Text style={[styles.plVal, { color: '#3b82f6' }]}>{fmt(stockAtCost)}</Text></View>
-                <View style={styles.plRow}><Text style={styles.plLabel}>Value at Selling Price</Text><Text style={[styles.plVal, { color: brand.primary }]}>{fmt(stockAtSell)}</Text></View>
+                <View style={styles.plRow}><Text style={styles.plLabel}>Value at Selling Price</Text><Text style={[styles.plVal, { color: C.accent }]}>{fmt(stockAtSell)}</Text></View>
                 <View style={styles.plRow}><Text style={styles.plLabel}>Potential Profit</Text><Text style={[styles.plVal, { color: '#22c55e' }]}>{fmt(stockAtSell - stockAtCost)}</Text></View>
               </Card.Content>
             </Card>
@@ -411,7 +413,7 @@ export default function ReportsScreen() {
                 <Divider style={{ marginVertical: 12 }} />
                 <View style={styles.plRow}><Text style={styles.plLabel}>Taxable Sales (excl. VAT)</Text><Text style={styles.plVal}>{fmt(totalRevenue - totalVAT)}</Text></View>
                 <View style={styles.plRow}><Text style={styles.plLabel}>VAT at 16%</Text><Text style={[styles.plVal, { color: '#f59e0b' }]}>{fmt(totalVAT)}</Text></View>
-                <View style={styles.plRow}><Text style={styles.plLabel}>Gross Revenue</Text><Text style={[styles.plVal, { color: brand.primary }]}>{fmt(totalRevenue)}</Text></View>
+                <View style={styles.plRow}><Text style={styles.plLabel}>Gross Revenue</Text><Text style={[styles.plVal, { color: C.accent }]}>{fmt(totalRevenue)}</Text></View>
                 <Divider style={{ marginVertical: 12 }} />
                 <Text style={{ fontSize: 11, color: '#aaa', lineHeight: 16 }}>
                   This VAT summary is for your KRA iTax filing. Submit through your KRA portal or eTIMS system.
@@ -438,7 +440,7 @@ export default function ReportsScreen() {
                 <View style={styles.plRow}><Text style={styles.plLabel}>Expected Cash Sales</Text><Text style={styles.plVal}>{fmt(expectedCash)}</Text></View>
                 <View style={styles.plRow}><Text style={styles.plLabel}>Expected M-Pesa</Text><Text style={styles.plVal}>{fmt(expectedMpesa)}</Text></View>
                 <View style={styles.plRow}><Text style={styles.plLabel}>Credit Sales</Text><Text style={[styles.plVal, { color: '#f59e0b' }]}>{fmt(expectedCredit)}</Text></View>
-                <View style={styles.plRow}><Text style={styles.plLabel}>Drawer Balance</Text><Text style={[styles.plVal, { color: brand.primary }]}>{fmt(drawerBalance ?? 0)}</Text></View>
+                <View style={styles.plRow}><Text style={styles.plLabel}>Drawer Balance</Text><Text style={[styles.plVal, { color: C.accent }]}>{fmt(drawerBalance ?? 0)}</Text></View>
                 <Divider style={{ marginVertical: 10 }} />
                 <Text style={{ fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6 }}>Actual Cash in Drawer</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -471,46 +473,48 @@ export default function ReportsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: brand.primary },
-  headerTitle: { color: '#fff', fontWeight: '700' },
-  tabs: { flexDirection: 'row', padding: 12, gap: 8 },
-  tab: { backgroundColor: '#f0f0f0', flex: 1, justifyContent: 'center' },
-  tabActive: { backgroundColor: brand.primary },
-  tabText: { fontSize: 12, textAlign: 'center' },
-  tabTextActive: { color: '#fff', fontWeight: '700' },
-  scroll: { flex: 1 },
-  card: { marginHorizontal: 12, marginBottom: 12, borderRadius: 12 },
-  cardTitle: { fontSize: 14, fontWeight: '700', color: '#333' },
-  bigStat: { alignItems: 'center', paddingVertical: 8 },
-  bigVal: { fontSize: 32, fontWeight: '800', color: brand.primary },
-  bigLabel: { fontSize: 12, color: '#888', marginTop: 4 },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-around' },
-  stat: { alignItems: 'center' },
-  statVal: { fontSize: 16, fontWeight: '700', color: brand.primary },
-  statLabel: { fontSize: 11, color: '#888', marginTop: 2 },
-  pmRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  pmLabel: { width: 56, fontSize: 13, color: '#444' },
-  barBg: { flex: 1, height: 8, backgroundColor: '#f0f0f0', borderRadius: 4, marginHorizontal: 8, overflow: 'hidden' },
-  bar: { height: '100%', borderRadius: 4 },
-  pmVal: { width: 90, fontSize: 12, fontWeight: '700', textAlign: 'right' },
-  productRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  rank: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
-  rankNum: { fontSize: 12, fontWeight: '700' },
-  productName: { flex: 1, fontSize: 13, color: '#222' },
-  productRight: { alignItems: 'flex-end' },
-  productQty: { fontSize: 11, color: '#888' },
-  productRev: { fontSize: 13, fontWeight: '700', color: brand.primary },
-  trendRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  trendDate: { width: 44, fontSize: 12, color: '#666' },
-  trendVal: { width: 90, fontSize: 11, color: '#444', textAlign: 'right' },
-  reportTabsScroll: { maxHeight: 44 },
-  reportTabsContent: { paddingHorizontal: 12, gap: 8, paddingVertical: 6 },
-  reportTab: { backgroundColor: '#f0f0f0' },
-  reportTabActive: { backgroundColor: brand.primary },
-  plRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  plLabel: { fontSize: 13, color: '#555', flex: 1 },
-  plVal: { fontSize: 13, fontWeight: '700', color: '#333' },
-  stockAlertRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-});
+function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: C.bg },
+    header: { backgroundColor: C.accent },
+    headerTitle: { color: '#fff', fontWeight: '700' },
+    tabs: { flexDirection: 'row', padding: 12, gap: 8 },
+    tab: { backgroundColor: C.elevated, flex: 1, justifyContent: 'center' },
+    tabActive: { backgroundColor: C.accent },
+    tabText: { fontSize: 12, textAlign: 'center' },
+    tabTextActive: { color: '#fff', fontWeight: '700' },
+    scroll: { flex: 1 },
+    card: { marginHorizontal: 12, marginBottom: 12, borderRadius: 12 },
+    cardTitle: { fontSize: 14, fontWeight: '700', color: C.text },
+    bigStat: { alignItems: 'center', paddingVertical: 8 },
+    bigVal: { fontSize: 32, fontWeight: '800', color: C.accent },
+    bigLabel: { fontSize: 12, color: C.muted, marginTop: 4 },
+    statsRow: { flexDirection: 'row', justifyContent: 'space-around' },
+    stat: { alignItems: 'center' },
+    statVal: { fontSize: 16, fontWeight: '700', color: C.accent },
+    statLabel: { fontSize: 11, color: C.muted, marginTop: 2 },
+    pmRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+    pmLabel: { width: 56, fontSize: 13, color: C.text },
+    barBg: { flex: 1, height: 8, backgroundColor: C.elevated, borderRadius: 4, marginHorizontal: 8, overflow: 'hidden' },
+    bar: { height: '100%', borderRadius: 4 },
+    pmVal: { width: 90, fontSize: 12, fontWeight: '700', textAlign: 'right' },
+    productRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+    rank: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+    rankNum: { fontSize: 12, fontWeight: '700' },
+    productName: { flex: 1, fontSize: 13, color: C.text },
+    productRight: { alignItems: 'flex-end' },
+    productQty: { fontSize: 11, color: C.muted },
+    productRev: { fontSize: 13, fontWeight: '700', color: C.accent },
+    trendRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+    trendDate: { width: 44, fontSize: 12, color: C.muted },
+    trendVal: { width: 90, fontSize: 11, color: C.text, textAlign: 'right' },
+    reportTabsScroll: { maxHeight: 44 },
+    reportTabsContent: { paddingHorizontal: 12, gap: 8, paddingVertical: 6 },
+    reportTab: { backgroundColor: C.elevated },
+    reportTabActive: { backgroundColor: C.accent },
+    plRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+    plLabel: { fontSize: 13, color: C.muted, flex: 1 },
+    plVal: { fontSize: 13, fontWeight: '700', color: C.text },
+    stockAlertRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: C.border },
+  });
+}
