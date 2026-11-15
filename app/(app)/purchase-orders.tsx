@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, FlatList, Alert, ScrollView, Pressable, Platform } from 'react-native';
+import { View, StyleSheet, FlatList, Alert, ScrollView, Pressable } from 'react-native';
 import { Text, Button, Appbar, Card, Portal, Dialog, TextInput, FAB, Chip, Divider, IconButton } from 'react-native-paper';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -254,21 +253,8 @@ export default function PurchaseOrdersScreen() {
                   <Text style={styles.dateLabel}>Expected Delivery Date</Text>
                   <Text style={styles.dateValue}>{dayjs(expectedDate).format('D MMMM YYYY')}</Text>
                 </View>
-                <MaterialCommunityIcons name="chevron-down" size={18} color={C.muted} />
+                <MaterialCommunityIcons name="chevron-right" size={18} color={C.muted} />
               </Pressable>
-
-              {datePickerOpen && (
-                <DateTimePicker
-                  value={new Date(expectedDate)}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  minimumDate={new Date()}
-                  onChange={(_event, date) => {
-                    setDatePickerOpen(Platform.OS === 'ios');
-                    if (date) setExpectedDate(dayjs(date).format('YYYY-MM-DD'));
-                  }}
-                />
-              )}
 
               <TextInput label="Notes" value={notes} onChangeText={setNotes} mode="outlined" style={[styles.input, { marginTop: 8 }]} />
               <Divider style={{ marginVertical: 10 }} />
@@ -509,8 +495,95 @@ export default function PurchaseOrdersScreen() {
             <Button onPress={() => setProductPickerOpen(false)}>Cancel</Button>
           </Dialog.Actions>
         </Dialog>
+
+        {/* Date Picker */}
+        <DatePickerDialog
+          visible={datePickerOpen}
+          value={expectedDate}
+          onConfirm={(d) => { setExpectedDate(d); setDatePickerOpen(false); }}
+          onDismiss={() => setDatePickerOpen(false)}
+          colors={C}
+        />
       </Portal>
     </SafeAreaView>
+  );
+}
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function DatePickerDialog({ visible, value, onConfirm, onDismiss, colors: C }: {
+  visible: boolean;
+  value: string;
+  onConfirm: (date: string) => void;
+  onDismiss: () => void;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  const [year, setYear] = useState(() => dayjs(value).year());
+  const [month, setMonth] = useState(() => dayjs(value).month()); // 0-indexed
+  const [day, setDay] = useState(() => dayjs(value).date());
+
+  React.useEffect(() => {
+    if (visible) {
+      setYear(dayjs(value).year());
+      setMonth(dayjs(value).month());
+      setDay(dayjs(value).date());
+    }
+  }, [visible, value]);
+
+  const daysInMonth = dayjs(`${year}-${month + 1}-01`).daysInMonth();
+  const safeDay = Math.min(day, daysInMonth);
+
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  // Show years from today up to 2 years ahead
+  const thisYear = dayjs().year();
+  const years = Array.from({ length: 3 }, (_, i) => thisYear + i);
+
+  const confirm = () => {
+    onConfirm(dayjs(`${year}-${month + 1}-${safeDay}`).format('YYYY-MM-DD'));
+  };
+
+  return (
+    <Dialog visible={visible} onDismiss={onDismiss}>
+      <Dialog.Title>Select Expected Date</Dialog.Title>
+      <Dialog.Content>
+        {/* Month row */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <IconButton icon="chevron-left" size={22} onPress={() => setMonth((m) => (m === 0 ? 11 : m - 1))} />
+          <Text style={{ fontSize: 16, fontWeight: '700', color: C.text, flex: 1, textAlign: 'center' }}>
+            {MONTHS[month]} {year}
+          </Text>
+          <IconButton icon="chevron-right" size={22} onPress={() => setMonth((m) => (m === 11 ? 0 : m + 1))} />
+        </View>
+        {/* Year row */}
+        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
+          {years.map((y) => (
+            <Pressable
+              key={y}
+              onPress={() => setYear(y)}
+              style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: y === year ? C.accent : C.elevated }}
+            >
+              <Text style={{ color: y === year ? '#fff' : C.text, fontWeight: '700', fontSize: 13 }}>{y}</Text>
+            </Pressable>
+          ))}
+        </View>
+        {/* Day grid */}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
+          {days.map((d) => (
+            <Pressable
+              key={d}
+              onPress={() => setDay(d)}
+              style={{ width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: d === safeDay ? C.accent : C.elevated }}
+            >
+              <Text style={{ color: d === safeDay ? '#fff' : C.text, fontSize: 13, fontWeight: d === safeDay ? '700' : '400' }}>{d}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </Dialog.Content>
+      <Dialog.Actions>
+        <Button onPress={onDismiss}>Cancel</Button>
+        <Button mode="contained" onPress={confirm}>Confirm</Button>
+      </Dialog.Actions>
+    </Dialog>
   );
 }
 
