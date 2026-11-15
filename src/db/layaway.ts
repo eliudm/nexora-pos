@@ -9,7 +9,7 @@ export interface Layaway {
   total_amount: number;
   deposit_paid: number;
   balance_due: number;
-  status: 'OPEN' | 'COMPLETED' | 'CANCELLED';
+  status: 'OPEN' | 'RESERVED' | 'COMPLETED' | 'CANCELLED';
   cashier_id: number | null;
   cashier_name: string | null;
   created_at: string;
@@ -29,7 +29,7 @@ export interface LayawayPayment {
 export const layawayQueries = {
   create: async (data: {
     customerId?: number | null;
-    customerName?: string | null;
+    customerName: string;           // required
     description?: string | null;
     totalAmount: number;
     depositAmount: number;
@@ -37,6 +37,7 @@ export const layawayQueries = {
     mpesaRef?: string;
     cashierId?: number | null;
     cashierName?: string | null;
+    collectLater?: boolean;         // pay in full now, collect later → RESERVED
   }): Promise<number> => {
     const db = await getDb();
     const date = new Date();
@@ -47,20 +48,25 @@ export const layawayQueries = {
     const seq = String((existing?.c ?? 0) + 1).padStart(4, '0');
     const layawayNo = `LAY-${dateStr}-${seq}`;
 
+    // RESERVED = paid in full upfront, waiting for collection
+    const depositAmount = data.collectLater ? data.totalAmount : data.depositAmount;
+    const balanceDue = data.totalAmount - depositAmount;
+    const status = data.collectLater ? 'RESERVED' : 'OPEN';
+
     const r = await db.runAsync(
       `INSERT INTO layaways (layaway_no, customer_id, customer_name, description, total_amount, deposit_paid, balance_due, status, cashier_id, cashier_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?)`,
-      [layawayNo, data.customerId ?? null, data.customerName ?? null, data.description ?? null,
-       data.totalAmount, data.depositAmount, data.totalAmount - data.depositAmount,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [layawayNo, data.customerId ?? null, data.customerName, data.description ?? null,
+       data.totalAmount, depositAmount, balanceDue, status,
        data.cashierId ?? null, data.cashierName ?? null],
     );
     const layawayId = r.lastInsertRowId;
 
-    if (data.depositAmount > 0) {
+    if (depositAmount > 0) {
       await db.runAsync(
         `INSERT INTO layaway_payments (layaway_id, amount, payment_method, mpesa_ref, cashier_id, cashier_name)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [layawayId, data.depositAmount, data.paymentMethod ?? 'CASH', data.mpesaRef ?? null,
+        [layawayId, depositAmount, data.paymentMethod ?? 'CASH', data.mpesaRef ?? null,
          data.cashierId ?? null, data.cashierName ?? null],
       );
     }
@@ -116,6 +122,7 @@ export const layawayQueries = {
     await db.runAsync("UPDATE layaways SET status = 'CANCELLED' WHERE id = ?", [id]);
   },
 
+  // Used for RESERVED items when customer comes to collect, and for COMPLETED layaways.
   postAsSale: async (layawayId: number, cashierId?: number | null): Promise<{
     invoiceNo: string;
     paymentMethod: string;

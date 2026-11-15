@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, FlatList, Alert } from 'react-native';
+import { View, StyleSheet, FlatList, Alert, Switch } from 'react-native';
 import { Text, Appbar, Card, Button, Portal, Dialog, TextInput, Chip, Divider } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -18,8 +18,16 @@ import dayjs from 'dayjs';
 
 const STATUS_COLOR: Record<string, string> = {
   OPEN: '#3b82f6',
+  RESERVED: '#8b5cf6',
   COMPLETED: '#22c55e',
   CANCELLED: '#aaa',
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  OPEN: 'IN PROGRESS',
+  RESERVED: 'PAID · COLLECT',
+  COMPLETED: 'COLLECTED',
+  CANCELLED: 'CANCELLED',
 };
 
 const PAY_METHODS = ['CASH', 'MPESA', 'BANK'] as const;
@@ -34,6 +42,7 @@ export default function LayawayScreen() {
   const [paymentOpen, setPaymentOpen] = useState(false);
 
   // Create form
+  const [customerName, setCustomerName] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -42,6 +51,7 @@ export default function LayawayScreen() {
   const [depositAmount, setDepositAmount] = useState('');
   const [createPayMethod, setCreatePayMethod] = useState<'CASH' | 'MPESA' | 'BANK'>('CASH');
   const [createMpesaRef, setCreateMpesaRef] = useState('');
+  const [collectLater, setCollectLater] = useState(false);
 
   // Add payment form
   const [payAmount, setPayAmount] = useState('');
@@ -70,26 +80,33 @@ export default function LayawayScreen() {
     queryFn: getBusinessInfo,
   });
 
+  const resetCreateForm = () => {
+    setCustomerName('');
+    setSelectedCustomer(null);
+    setDescription('');
+    setTotalAmount('');
+    setDepositAmount('');
+    setCreateMpesaRef('');
+    setCollectLater(false);
+  };
+
   const createMutation = useMutation({
     mutationFn: () => layawayQueries.create({
       customerId: selectedCustomer?.id,
-      customerName: selectedCustomer?.name,
+      customerName: customerName.trim(),
       description: description.trim() || undefined,
       totalAmount: parseFloat(totalAmount) || 0,
-      depositAmount: parseFloat(depositAmount) || 0,
+      depositAmount: collectLater ? (parseFloat(totalAmount) || 0) : (parseFloat(depositAmount) || 0),
       paymentMethod: createPayMethod,
       mpesaRef: createMpesaRef.trim() || undefined,
       cashierId: user?.id,
       cashierName: user?.name,
+      collectLater,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['layaways'] });
       setCreateOpen(false);
-      setSelectedCustomer(null);
-      setDescription('');
-      setTotalAmount('');
-      setDepositAmount('');
-      setCreateMpesaRef('');
+      resetCreateForm();
       refetch();
     },
   });
@@ -134,10 +151,15 @@ export default function LayawayScreen() {
   };
 
   const confirmCreate = () => {
+    if (!customerName.trim()) { Alert.alert('Required', 'Enter the customer name.'); return; }
     if (!totalAmount || parseFloat(totalAmount) <= 0) { Alert.alert('Required', 'Enter the total amount.'); return; }
-    const dep = parseFloat(depositAmount) || 0;
+    const dep = collectLater ? parseFloat(totalAmount) : (parseFloat(depositAmount) || 0);
     const tot = parseFloat(totalAmount) || 0;
-    if (dep > tot) { Alert.alert('Invalid', 'Deposit cannot exceed the total amount.'); return; }
+    if (!collectLater && dep > tot) { Alert.alert('Invalid', 'Deposit cannot exceed the total amount.'); return; }
+    if (createPayMethod === 'MPESA' && dep > 0 && !createMpesaRef.trim()) {
+      Alert.alert('Required', 'Enter the M-Pesa transaction code.');
+      return;
+    }
     createMutation.mutate();
   };
 
@@ -153,11 +175,12 @@ export default function LayawayScreen() {
     addPaymentMutation.mutate();
   };
 
-  const handlePostAsSale = async () => {
-    if (!completedLayaway || !bizInfo) return;
+  const handlePostAsSale = async (lay?: Layaway | null) => {
+    const target = lay ?? completedLayaway;
+    if (!target || !bizInfo) return;
     setPostingSale(true);
     try {
-      const result = await layawayQueries.postAsSale(completedLayaway.id, user?.id ?? null);
+      const result = await layawayQueries.postAsSale(target.id, user?.id ?? null);
       qc.invalidateQueries({ queryKey: ['layaways'] });
       qc.invalidateQueries({ queryKey: ['daily-summary'] });
       setCompletionOpen(false);
@@ -183,13 +206,7 @@ export default function LayawayScreen() {
       total: data.total,
       payment_method: data.paymentMethod,
       mpesa_ref: data.mpesaRef,
-      items: [{
-        product_name: data.description ?? 'Layaway Item',
-        qty: 1,
-        unit_price: data.total,
-        vat_rate: 0,
-        total: data.total,
-      }],
+      items: [{ product_name: data.description ?? 'Layaway Item', qty: 1, unit_price: data.total, vat_rate: 0, total: data.total }],
     };
     const bizData: BusinessInfo = {
       name: biz.name ?? '',
@@ -207,19 +224,8 @@ export default function LayawayScreen() {
       if (res.success) return;
     }
     Alert.alert('Receipt', 'Print or share receipt:', [
-      {
-        text: 'Print', onPress: async () => {
-          const html = buildReceiptHtml(receiptSale, bizData);
-          await Print.printAsync({ html });
-        },
-      },
-      {
-        text: 'Share PDF', onPress: async () => {
-          const html = buildReceiptHtml(receiptSale, bizData);
-          const { uri } = await Print.printToFileAsync({ html });
-          await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Share Receipt' });
-        },
-      },
+      { text: 'Print', onPress: async () => { const html = buildReceiptHtml(receiptSale, bizData); await Print.printAsync({ html }); } },
+      { text: 'Share PDF', onPress: async () => { const html = buildReceiptHtml(receiptSale, bizData); const { uri } = await Print.printToFileAsync({ html }); await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Share Receipt' }); } },
       { text: 'Skip' },
     ]);
   };
@@ -256,7 +262,7 @@ export default function LayawayScreen() {
                   {item.description && <Text style={styles.desc} numberOfLines={1}>{item.description}</Text>}
                 </View>
                 <Chip compact style={{ backgroundColor: STATUS_COLOR[item.status] + '22' }} textStyle={{ color: STATUS_COLOR[item.status], fontWeight: '700', fontSize: 11 }}>
-                  {item.status}
+                  {STATUS_LABEL[item.status] ?? item.status}
                 </Chip>
               </View>
               <View style={styles.amtRow}>
@@ -273,6 +279,12 @@ export default function LayawayScreen() {
                   <Text style={[styles.amtVal, { color: item.balance_due > 0 ? '#e53935' : '#22c55e' }]}>{fmt(item.balance_due)}</Text>
                 </View>
               </View>
+              {item.status === 'RESERVED' && (
+                <View style={[styles.reservedBanner, { backgroundColor: '#8b5cf611', borderColor: '#8b5cf644' }]}>
+                  <MaterialCommunityIcons name="package-variant-closed" size={14} color="#8b5cf6" />
+                  <Text style={{ color: '#8b5cf6', fontSize: 11, fontWeight: '700', marginLeft: 6 }}>Paid in full — waiting for collection</Text>
+                </View>
+              )}
               <Text style={styles.date}>{dayjs(item.created_at).format('D MMM YYYY')}</Text>
             </Card.Content>
           </Card>
@@ -280,17 +292,50 @@ export default function LayawayScreen() {
       />
 
       <Portal>
-        {/* Create Layaway */}
-        <Dialog visible={createOpen} onDismiss={() => setCreateOpen(false)}>
-          <Dialog.ScrollArea style={{ maxHeight: 520 }}>
+        {/* ── Create Layaway ── */}
+        <Dialog visible={createOpen} onDismiss={() => { setCreateOpen(false); resetCreateForm(); }}>
+          <Dialog.ScrollArea style={{ maxHeight: 580 }}>
             <Dialog.Title>New Layaway</Dialog.Title>
             <View style={{ padding: 16 }}>
-              <Button mode="outlined" icon="account" onPress={() => setCustomerPickerOpen(true)} style={{ marginBottom: 10 }}>
-                {selectedCustomer ? selectedCustomer.name : 'Select Customer (optional)'}
+              <TextInput
+                label="Customer Name *"
+                value={customerName}
+                onChangeText={setCustomerName}
+                mode="outlined"
+                style={styles.input}
+                placeholder="Enter customer name"
+              />
+              <Button
+                mode="text"
+                icon="account-search"
+                compact
+                onPress={() => setCustomerPickerOpen(true)}
+                style={{ alignSelf: 'flex-start', marginTop: -4, marginBottom: 8 }}
+                textColor={C.accent}
+              >
+                {selectedCustomer ? `Linked: ${selectedCustomer.name}` : 'Link to existing customer'}
               </Button>
-              <TextInput label="Description / Item" value={description} onChangeText={setDescription} mode="outlined" style={styles.input} />
+
+              <TextInput label="Description / Items" value={description} onChangeText={setDescription} mode="outlined" style={styles.input} />
               <TextInput label="Total Amount (KES) *" value={totalAmount} onChangeText={setTotalAmount} mode="outlined" keyboardType="decimal-pad" style={styles.input} />
-              <TextInput label="Initial Deposit (KES)" value={depositAmount} onChangeText={setDepositAmount} mode="outlined" keyboardType="decimal-pad" style={styles.input} />
+
+              {/* Pay & Collect Later toggle */}
+              <View style={[styles.toggleRow, { backgroundColor: C.elevated, borderColor: '#8b5cf644' }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontWeight: '700', color: C.text, fontSize: 14 }}>Pay in Full &amp; Collect Later</Text>
+                  <Text style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>Customer pays the full amount now and collects the item later.</Text>
+                </View>
+                <Switch
+                  value={collectLater}
+                  onValueChange={setCollectLater}
+                  trackColor={{ true: '#8b5cf6', false: C.border }}
+                />
+              </View>
+
+              {!collectLater && (
+                <TextInput label="Initial Deposit (KES)" value={depositAmount} onChangeText={setDepositAmount} mode="outlined" keyboardType="decimal-pad" style={styles.input} />
+              )}
+
               <Text style={styles.pmLabel}>Payment Method</Text>
               <View style={styles.pmRow}>
                 {PAY_METHODS.map((m) => (
@@ -298,28 +343,42 @@ export default function LayawayScreen() {
                 ))}
               </View>
               {createPayMethod === 'MPESA' && (
-                <TextInput label="M-Pesa Ref" value={createMpesaRef} onChangeText={setCreateMpesaRef} mode="outlined" style={styles.input} autoCapitalize="characters" />
+                <TextInput label="M-Pesa Ref *" value={createMpesaRef} onChangeText={setCreateMpesaRef} mode="outlined" style={styles.input} autoCapitalize="characters" />
               )}
-              <Text style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
-                The item will be physically set aside for the customer once the deposit is received.
-              </Text>
+
+              {collectLater && totalAmount ? (
+                <View style={[styles.collectNote, { backgroundColor: '#8b5cf611', borderColor: '#8b5cf633' }]}>
+                  <MaterialCommunityIcons name="check-circle-outline" size={14} color="#8b5cf6" />
+                  <Text style={{ color: '#8b5cf6', fontSize: 12, marginLeft: 6, flex: 1 }}>
+                    Full {fmt(parseFloat(totalAmount) || 0)} collected now. Item set aside for pickup.
+                  </Text>
+                </View>
+              ) : (
+                <Text style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Item will be set aside for the customer once the deposit is received.</Text>
+              )}
             </View>
           </Dialog.ScrollArea>
           <Dialog.Actions>
-            <Button onPress={() => setCreateOpen(false)}>Cancel</Button>
-            <Button mode="contained" onPress={confirmCreate} loading={createMutation.isPending}>Create</Button>
+            <Button onPress={() => { setCreateOpen(false); resetCreateForm(); }}>Cancel</Button>
+            <Button mode="contained" onPress={confirmCreate} loading={createMutation.isPending}>
+              {collectLater ? 'Reserve & Collect Later' : 'Create Layaway'}
+            </Button>
           </Dialog.Actions>
         </Dialog>
 
-        {/* Customer Picker */}
+        {/* ── Customer Picker ── */}
         <Dialog visible={customerPickerOpen} onDismiss={() => setCustomerPickerOpen(false)}>
           <Dialog.Title>Select Customer</Dialog.Title>
           <Dialog.Content>
             <TextInput label="Search" value={customerSearch} onChangeText={setCustomerSearch} mode="outlined" dense />
             {(customers ?? []).slice(0, 6).map((c) => (
               <View key={c.id}>
-                <Text onPress={() => { setSelectedCustomer(c); setCustomerPickerOpen(false); }}
-                  style={{ paddingVertical: 10, fontSize: 14 }}>{c.name} {c.phone ? `· ${c.phone}` : ''}</Text>
+                <Text
+                  onPress={() => { setSelectedCustomer(c); setCustomerName(c.name); setCustomerPickerOpen(false); }}
+                  style={{ paddingVertical: 10, fontSize: 14, color: C.text }}
+                >
+                  {c.name}{c.phone ? ` · ${c.phone}` : ''}
+                </Text>
                 <Divider />
               </View>
             ))}
@@ -327,13 +386,24 @@ export default function LayawayScreen() {
           <Dialog.Actions><Button onPress={() => setCustomerPickerOpen(false)}>Close</Button></Dialog.Actions>
         </Dialog>
 
-        {/* Detail Dialog */}
+        {/* ── Detail Dialog ── */}
         <Dialog visible={!!detailLayaway} onDismiss={() => setDetailLayaway(null)}>
-          <Dialog.ScrollArea style={{ maxHeight: 500 }}>
+          <Dialog.ScrollArea style={{ maxHeight: 520 }}>
             <Dialog.Title>{detailLayaway?.layaway_no}</Dialog.Title>
             <View style={{ padding: 16 }}>
-              {detailLayaway?.customer_name && <Text style={{ color: C.muted, marginBottom: 4 }}>Customer: {detailLayaway.customer_name}</Text>}
-              {detailLayaway?.description && <Text style={{ color: C.muted, marginBottom: 8 }}>{detailLayaway.description}</Text>}
+              {detailLayaway?.customer_name && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <MaterialCommunityIcons name="account" size={14} color={C.accent} />
+                  <Text style={{ color: C.accent, fontWeight: '700', fontSize: 13 }}>{detailLayaway.customer_name}</Text>
+                </View>
+              )}
+              {detailLayaway?.description && <Text style={{ color: C.muted, marginBottom: 10, fontSize: 13 }}>{detailLayaway.description}</Text>}
+              {detailLayaway?.status === 'RESERVED' && (
+                <View style={[styles.reservedBanner, { backgroundColor: '#8b5cf611', borderColor: '#8b5cf644', marginBottom: 12 }]}>
+                  <MaterialCommunityIcons name="package-variant-closed" size={16} color="#8b5cf6" />
+                  <Text style={{ color: '#8b5cf6', fontSize: 12, fontWeight: '700', marginLeft: 8, flex: 1 }}>Paid in full — customer has not yet collected</Text>
+                </View>
+              )}
               <View style={styles.amtRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.amtLabel}>Total</Text>
@@ -361,60 +431,52 @@ export default function LayawayScreen() {
           </Dialog.ScrollArea>
           <Dialog.Actions>
             <Button onPress={() => setDetailLayaway(null)}>Close</Button>
-            {detailLayaway?.status === 'OPEN' && (
+            {(detailLayaway?.status === 'OPEN' || detailLayaway?.status === 'RESERVED') && (
               <Button textColor="#e53935" onPress={() => Alert.alert('Cancel Layaway', 'Mark this layaway as cancelled?', [
                 { text: 'No' },
-                { text: 'Yes', style: 'destructive', onPress: () => cancelMutation.mutate(detailLayaway.id) },
+                { text: 'Yes', style: 'destructive', onPress: () => cancelMutation.mutate(detailLayaway!.id) },
               ])}>Cancel</Button>
             )}
             {detailLayaway?.status === 'OPEN' && (detailLayaway.balance_due ?? 0) > 0 && (
               <Button mode="contained" onPress={() => setPaymentOpen(true)}>Add Payment</Button>
             )}
-            {detailLayaway?.status === 'COMPLETED' && (
+            {detailLayaway?.status === 'RESERVED' && (
               <Button
                 mode="contained"
-                icon="printer"
-                onPress={() => {
-                  setCompletedLayaway(detailLayaway);
-                  setCompletionOpen(true);
-                }}
+                buttonColor="#8b5cf6"
+                icon="package-variant"
+                loading={postingSale}
+                onPress={() => Alert.alert(
+                  'Mark as Collected',
+                  `Confirm that ${detailLayaway.customer_name ?? 'the customer'} has collected this item?`,
+                  [{ text: 'Cancel' }, { text: 'Confirm', onPress: () => handlePostAsSale(detailLayaway) }],
+                )}
               >
+                Mark as Collected
+              </Button>
+            )}
+            {detailLayaway?.status === 'COMPLETED' && (
+              <Button mode="contained" icon="printer" onPress={() => { setCompletedLayaway(detailLayaway); setCompletionOpen(true); }}>
                 Post as Sale
               </Button>
             )}
           </Dialog.Actions>
         </Dialog>
 
-        {/* Add Payment Dialog */}
+        {/* ── Add Payment Dialog ── */}
         <Dialog visible={paymentOpen} onDismiss={() => setPaymentOpen(false)}>
           <Dialog.Title>Add Payment</Dialog.Title>
           <Dialog.Content>
-            {/* Balance info */}
             <View style={[styles.balanceRow, { backgroundColor: C.elevated }]}>
               <View>
                 <Text style={[styles.balLabel, { color: C.muted }]}>Balance Due</Text>
                 <Text style={[styles.balAmt, { color: '#e53935' }]}>{fmt(detailLayaway?.balance_due ?? 0)}</Text>
               </View>
-              <Button
-                compact
-                mode="outlined"
-                onPress={() => setPayAmount(String(detailLayaway?.balance_due ?? 0))}
-                style={{ borderColor: C.accent }}
-                textColor={C.accent}
-              >
+              <Button compact mode="outlined" onPress={() => setPayAmount(String(detailLayaway?.balance_due ?? 0))} style={{ borderColor: C.accent }} textColor={C.accent}>
                 Pay Full
               </Button>
             </View>
-
-            <TextInput
-              label="Amount (KES)"
-              value={payAmount}
-              onChangeText={setPayAmount}
-              mode="outlined"
-              keyboardType="decimal-pad"
-              style={styles.input}
-              autoFocus
-            />
+            <TextInput label="Amount (KES)" value={payAmount} onChangeText={setPayAmount} mode="outlined" keyboardType="decimal-pad" style={styles.input} autoFocus />
             <Text style={styles.pmLabel}>Method</Text>
             <View style={styles.pmRow}>
               {PAY_METHODS.map((m) => (
@@ -431,7 +493,7 @@ export default function LayawayScreen() {
           </Dialog.Actions>
         </Dialog>
 
-        {/* Completion / Post-as-Sale Dialog */}
+        {/* ── Completion / Post-as-Sale Dialog ── */}
         <Dialog visible={completionOpen} onDismiss={() => setCompletionOpen(false)}>
           <Dialog.Title>Payment Complete!</Dialog.Title>
           <Dialog.Content>
@@ -443,26 +505,15 @@ export default function LayawayScreen() {
                 {completedLayaway?.layaway_no} is fully paid
               </Text>
               <Text style={{ fontSize: 13, color: C.muted, textAlign: 'center', marginTop: 6, lineHeight: 20 }}>
-                Post this layaway as a completed sale to record it in your revenue and print a receipt for the customer.
+                Post as a completed sale to record revenue and print a receipt.
               </Text>
             </View>
           </Dialog.Content>
           <Dialog.Actions style={{ flexDirection: 'column', gap: 8, paddingHorizontal: 16, paddingBottom: 12 }}>
-            <Button
-              mode="contained"
-              buttonColor={C.accent}
-              icon="receipt"
-              loading={postingSale}
-              onPress={handlePostAsSale}
-              style={{ width: '100%', borderRadius: 10 }}
-            >
+            <Button mode="contained" buttonColor={C.accent} icon="receipt" loading={postingSale} onPress={() => handlePostAsSale()} style={{ width: '100%', borderRadius: 10 }}>
               Post as Sale &amp; Print Receipt
             </Button>
-            <Button
-              onPress={() => { setCompletionOpen(false); setDetailLayaway(null); refetch(); }}
-              style={{ width: '100%' }}
-              textColor={C.muted}
-            >
+            <Button onPress={() => { setCompletionOpen(false); setDetailLayaway(null); refetch(); }} style={{ width: '100%' }} textColor={C.muted}>
               Close Without Posting
             </Button>
           </Dialog.Actions>
@@ -480,7 +531,7 @@ function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
     card: { borderRadius: 12 },
     cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 10 },
     layNo: { fontSize: 13, fontWeight: '700', color: C.text },
-    customer: { fontSize: 12, color: C.accent, marginTop: 2 },
+    customer: { fontSize: 13, color: C.accent, fontWeight: '600', marginTop: 2 },
     desc: { fontSize: 12, color: C.muted, marginTop: 2 },
     amtRow: { flexDirection: 'row', marginTop: 4 },
     amtLabel: { fontSize: 10, color: C.muted, textTransform: 'uppercase' },
@@ -493,5 +544,8 @@ function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
     balanceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 10, padding: 12, marginBottom: 12 },
     balLabel: { fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 },
     balAmt: { fontSize: 22, fontWeight: '900', marginTop: 2 },
+    toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 10, borderWidth: 1, padding: 12, marginBottom: 12 },
+    collectNote: { flexDirection: 'row', alignItems: 'flex-start', borderRadius: 8, borderWidth: 1, padding: 10, marginTop: 4 },
+    reservedBanner: { flexDirection: 'row', alignItems: 'center', borderRadius: 8, borderWidth: 1, padding: 8, marginTop: 8 },
   });
 }

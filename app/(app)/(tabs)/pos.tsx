@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { View, StyleSheet, FlatList, Alert, Pressable, TextInput as RNTextInput, Platform, ScrollView } from 'react-native';
-import { Text, Button, Appbar, Searchbar, Chip, Portal, Dialog, RadioButton, ActivityIndicator, IconButton, Badge } from 'react-native-paper';
+import { View, StyleSheet, FlatList, Alert, Pressable, Switch, TextInput as RNTextInput, Platform, ScrollView } from 'react-native';
+import { Text, Button, Appbar, Searchbar, Chip, Portal, Dialog, RadioButton, ActivityIndicator, IconButton, Badge, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -9,6 +9,7 @@ import * as Sharing from 'expo-sharing';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import dayjs from 'dayjs';
+import { layawayQueries } from '../../../src/db/layaway';
 import { productQueries, Product } from '../../../src/db/products';
 import { salesQueries, CartItem, SplitPayment } from '../../../src/db/sales';
 import { customerQueries, Customer } from '../../../src/db/customers';
@@ -101,6 +102,14 @@ export default function POSScreen() {
   // Cart modal
   const [cartModalVisible, setCartModalVisible] = useState(false);
 
+  // Layaway from POS
+  const [layDialogOpen, setLayDialogOpen] = useState(false);
+  const [layCustName, setLayCustName] = useState('');
+  const [layDeposit, setLayDeposit] = useState('');
+  const [layPayMethod, setLayPayMethod] = useState<'CASH' | 'MPESA' | 'BANK'>('CASH');
+  const [layMpesaRef, setLayMpesaRef] = useState('');
+  const [layCollectLater, setLayCollectLater] = useState(false);
+
   const lastScanRef = useRef<string>('');
 
   const { data: products, isLoading } = useQuery({
@@ -188,6 +197,36 @@ export default function POSScreen() {
       Alert.alert('Reversed', `Reversal posted as ${reversalInvoiceNo}. Stock restored.`);
     },
     onError: (e: any) => Alert.alert('Error', e.message),
+  });
+
+  const layawayMutation = useMutation({
+    mutationFn: () => layawayQueries.create({
+      customerName: layCustName.trim(),
+      description: cart.map(i => `${i.product_name} x${i.qty}`).join(', '),
+      totalAmount: total,
+      depositAmount: layCollectLater ? total : (parseFloat(layDeposit) || 0),
+      paymentMethod: layPayMethod,
+      mpesaRef: layMpesaRef.trim() || undefined,
+      cashierId: user?.id,
+      cashierName: user?.name,
+      collectLater: layCollectLater,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['layaways'] });
+      setCart([]);
+      setLayDialogOpen(false);
+      setLayCustName('');
+      setLayDeposit('');
+      setLayMpesaRef('');
+      setLayCollectLater(false);
+      Alert.alert(
+        'Layaway Created',
+        layCollectLater
+          ? 'Item reserved. Customer can collect when ready.'
+          : 'Layaway created. Customer can pay the balance on their next visit.',
+      );
+    },
+    onError: (e: any) => Alert.alert('Error', e.message ?? 'Could not create layaway.'),
   });
 
   const handleReload = () => {
@@ -844,7 +883,7 @@ export default function POSScreen() {
             </Pressable>
             <Pressable
               style={[styles.actionBtn, { backgroundColor: D.elevated, borderColor: D.warning + '55' }]}
-              onPress={() => { setCartModalVisible(false); router.push('/(app)/layaway'); }}
+              onPress={() => { setCartModalVisible(false); setTimeout(() => setLayDialogOpen(true), 200); }}
             >
               <MaterialCommunityIcons name="package-down" size={16} color={D.warning} />
               <Text style={[styles.actionBtnText, { color: D.warning }]}>Layaway</Text>
@@ -857,6 +896,81 @@ export default function POSScreen() {
               <MaterialCommunityIcons name="arrow-right" size={18} color="#fff" />
             </Pressable>
           </View>
+        </Dialog>
+
+        {/* ── Layaway from POS ── */}
+        <Dialog visible={layDialogOpen} onDismiss={() => setLayDialogOpen(false)} style={{ backgroundColor: D.surface }}>
+          <Dialog.ScrollArea style={{ maxHeight: 520 }}>
+            <Dialog.Title style={{ color: D.text }}>Save as Layaway</Dialog.Title>
+            <View style={{ padding: 16 }}>
+              {/* Cart summary */}
+              <View style={{ backgroundColor: D.elevated, borderRadius: 10, padding: 12, marginBottom: 14 }}>
+                <Text style={{ fontSize: 11, color: D.muted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Items ({cart.reduce((s, i) => s + i.qty, 0)})</Text>
+                {cart.map((i, idx) => (
+                  <Text key={idx} style={{ fontSize: 13, color: D.text, lineHeight: 20 }}>{i.product_name} × {i.qty}</Text>
+                ))}
+                <Text style={{ fontWeight: '900', fontSize: 18, color: D.text, marginTop: 8 }}>Total: KES {total.toFixed(0)}</Text>
+              </View>
+
+              <TextInput
+                label="Customer Name *"
+                value={layCustName}
+                onChangeText={setLayCustName}
+                mode="outlined"
+                style={{ marginBottom: 10 }}
+                placeholder="Enter customer name"
+                theme={{ colors: { background: D.surface } }}
+              />
+
+              {/* Pay & Collect Later */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: D.elevated, borderRadius: 10, borderWidth: 1, borderColor: '#8b5cf644', padding: 12, marginBottom: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontWeight: '700', color: D.text, fontSize: 13 }}>Pay in Full &amp; Collect Later</Text>
+                  <Text style={{ color: D.muted, fontSize: 11, marginTop: 2 }}>Customer pays KES {total.toFixed(0)} now and collects later.</Text>
+                </View>
+                <Switch value={layCollectLater} onValueChange={setLayCollectLater} trackColor={{ true: '#8b5cf6', false: D.border }} />
+              </View>
+
+              {!layCollectLater && (
+                <TextInput
+                  label="Deposit Amount (KES)"
+                  value={layDeposit}
+                  onChangeText={setLayDeposit}
+                  mode="outlined"
+                  keyboardType="decimal-pad"
+                  style={{ marginBottom: 10 }}
+                  placeholder="0"
+                  theme={{ colors: { background: D.surface } }}
+                />
+              )}
+
+              <Text style={{ fontSize: 12, fontWeight: '600', color: D.muted, marginBottom: 6 }}>Payment Method</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+                {(['CASH', 'MPESA', 'BANK'] as const).map(m => (
+                  <Chip key={m} selected={layPayMethod === m} onPress={() => setLayPayMethod(m)} compact>{m}</Chip>
+                ))}
+              </View>
+              {layPayMethod === 'MPESA' && (
+                <TextInput label="M-Pesa Ref *" value={layMpesaRef} onChangeText={setLayMpesaRef} mode="outlined" style={{ marginBottom: 10 }} autoCapitalize="characters" theme={{ colors: { background: D.surface } }} />
+              )}
+            </View>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
+            <Button textColor={D.muted} onPress={() => setLayDialogOpen(false)}>Cancel</Button>
+            <Button
+              mode="contained"
+              loading={layawayMutation.isPending}
+              onPress={() => {
+                if (!layCustName.trim()) { Alert.alert('Required', 'Enter the customer name.'); return; }
+                if (layPayMethod === 'MPESA' && !layCollectLater && parseFloat(layDeposit || '0') > 0 && !layMpesaRef.trim()) {
+                  Alert.alert('Required', 'Enter the M-Pesa transaction code.'); return;
+                }
+                layawayMutation.mutate();
+              }}
+            >
+              {layCollectLater ? 'Reserve & Collect Later' : 'Create Layaway'}
+            </Button>
+          </Dialog.Actions>
         </Dialog>
 
         {/* Barcode Scanner */}
