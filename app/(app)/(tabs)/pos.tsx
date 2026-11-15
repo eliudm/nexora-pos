@@ -62,6 +62,13 @@ export default function POSScreen() {
   const [holdLabel, setHoldLabel] = useState('');
   const [resumeDialogOpen, setResumeDialogOpen] = useState(false);
 
+  // Controls menu + Close Register + Reprint
+  const [controlsMenuOpen, setControlsMenuOpen] = useState(false);
+  const [closeRegisterOpen, setCloseRegisterOpen] = useState(false);
+  const [reprintSale, setReprintSale] = useState<any>(null);
+  const [reprintDialogOpen, setReprintDialogOpen] = useState(false);
+  const [reprintSearch, setReprintSearch] = useState('');
+
   // Quantity input dialog
   const [qtyDialogItem, setQtyDialogItem] = useState<CartItem | null>(null);
   const [qtyInput, setQtyInput] = useState('');
@@ -132,6 +139,33 @@ export default function POSScreen() {
     queryKey: ['biz-info'],
     queryFn: getBusinessInfo,
   });
+
+  const todayStr = dayjs().format('YYYY-MM-DD');
+  const { data: dailySummary } = useQuery({
+    queryKey: ['daily-summary', todayStr],
+    queryFn: () => salesQueries.getDailySummary(todayStr),
+    enabled: closeRegisterOpen,
+  });
+
+  const { data: recentSales } = useQuery({
+    queryKey: ['recent-sales-reprint', reprintSearch],
+    queryFn: () => salesQueries.getAll(todayStr, todayStr, 50),
+    enabled: reprintDialogOpen,
+  });
+
+  const handleReload = () => {
+    qc.invalidateQueries({ queryKey: ['products'] });
+    qc.invalidateQueries({ queryKey: ['categories'] });
+    setControlsMenuOpen(false);
+  };
+
+  const handleReprint = async (sale: any) => {
+    const full = await salesQueries.getById(sale.id);
+    if (full) {
+      setReprintDialogOpen(false);
+      await printReceipt(full);
+    }
+  };
 
   const mutation = useMutation({
     mutationFn: (vars: { items: CartItem[]; opts: Parameters<typeof salesQueries.create>[1] }) =>
@@ -505,6 +539,9 @@ export default function POSScreen() {
         <Pressable style={[styles.iconBtn, { backgroundColor: D.elevated, marginLeft: 8 }]} onPress={() => setResumeDialogOpen(true)}>
           <MaterialCommunityIcons name="history" size={22} color={D.text} />
         </Pressable>
+        <Pressable style={[styles.iconBtn, { backgroundColor: D.elevated, marginLeft: 8 }]} onPress={() => setControlsMenuOpen(true)}>
+          <MaterialCommunityIcons name="dots-vertical" size={22} color={D.text} />
+        </Pressable>
       </View>
 
       {/* â"€â"€ Search â"€â"€ */}
@@ -846,6 +883,101 @@ export default function POSScreen() {
           </Dialog.Actions>
         </Dialog>
 
+        {/* Controls Menu */}
+        <Dialog visible={controlsMenuOpen} onDismiss={() => setControlsMenuOpen(false)} style={{ backgroundColor: D.surface }}>
+          <Dialog.Title style={{ color: D.text }}>Controls</Dialog.Title>
+          <Dialog.Content style={{ paddingHorizontal: 0, paddingBottom: 0 }}>
+            {[
+              { icon: 'package-variant', label: 'Add Orders', sub: 'Resume a parked sale', onPress: () => { setControlsMenuOpen(false); setResumeDialogOpen(true); } },
+              { icon: 'printer-outline', label: 'Reprint Receipt', sub: 'Reprint a recent sale', onPress: () => { setControlsMenuOpen(false); setReprintDialogOpen(true); } },
+              { icon: 'refresh', label: 'Reload Products', sub: 'Refresh product catalogue', onPress: handleReload },
+              { icon: 'cash-register', label: 'Close Register', sub: "View today's sales totals", onPress: () => { setControlsMenuOpen(false); setCloseRegisterOpen(true); } },
+            ].map((item) => (
+              <Pressable
+                key={item.label}
+                onPress={item.onPress}
+                style={({ pressed }) => [styles.controlMenuItem, { borderBottomColor: D.border, backgroundColor: pressed ? D.elevated : 'transparent' }]}
+              >
+                <View style={[styles.controlMenuIcon, { backgroundColor: D.elevated }]}>
+                  <MaterialCommunityIcons name={item.icon as any} size={20} color={D.accent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: D.text, fontWeight: '700', fontSize: 14 }}>{item.label}</Text>
+                  <Text style={{ color: D.muted, fontSize: 12 }}>{item.sub}</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={18} color={D.muted} />
+              </Pressable>
+            ))}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button textColor={D.muted} onPress={() => setControlsMenuOpen(false)}>Close</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Close Register */}
+        <Dialog visible={closeRegisterOpen} onDismiss={() => setCloseRegisterOpen(false)} style={{ backgroundColor: D.surface }}>
+          <Dialog.Title style={{ color: D.text }}>Close Register</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ color: D.muted, fontSize: 12, marginBottom: 16 }}>{dayjs().format('dddd, D MMMM YYYY')}</Text>
+            {dailySummary ? (
+              <View>
+                {[
+                  { label: 'Total Sales', value: dailySummary.total_sales.toString(), accent: false },
+                  { label: 'Total Revenue', value: `KES ${dailySummary.total_revenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })}`, accent: true },
+                  { label: 'Cash', value: `KES ${dailySummary.cash_total.toLocaleString('en-KE', { minimumFractionDigits: 2 })}`, accent: false },
+                  { label: 'M-Pesa', value: `KES ${dailySummary.mpesa_total.toLocaleString('en-KE', { minimumFractionDigits: 2 })}`, accent: false },
+                  { label: 'Credit', value: `KES ${dailySummary.credit_total.toLocaleString('en-KE', { minimumFractionDigits: 2 })}`, accent: false },
+                ].map((row) => (
+                  <View key={row.label} style={[styles.registerRow, { borderBottomColor: D.border }]}>
+                    <Text style={{ color: D.muted, fontSize: 13 }}>{row.label}</Text>
+                    <Text style={{ color: row.accent ? D.accent : D.text, fontWeight: row.accent ? '900' : '700', fontSize: row.accent ? 16 : 13 }}>{row.value}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={{ color: D.muted, textAlign: 'center' }}>Loading...</Text>
+            )}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button textColor={D.muted} onPress={() => setCloseRegisterOpen(false)}>Close</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Reprint Dialog */}
+        <Dialog visible={reprintDialogOpen} onDismiss={() => setReprintDialogOpen(false)} style={{ backgroundColor: D.surface }}>
+          <Dialog.Title style={{ color: D.text }}>Reprint Receipt</Dialog.Title>
+          <Dialog.Content>
+            <Searchbar
+              placeholder="Search invoice or customer..."
+              value={reprintSearch}
+              onChangeText={setReprintSearch}
+              style={{ marginBottom: 8, backgroundColor: D.elevated }}
+            />
+            {(recentSales ?? [])
+              .filter((s) => !reprintSearch.trim() ||
+                s.invoice_no.toLowerCase().includes(reprintSearch.toLowerCase()) ||
+                (s.customer_name ?? '').toLowerCase().includes(reprintSearch.toLowerCase()))
+              .slice(0, 8)
+              .map((s) => (
+                <Pressable key={s.id} style={[styles.customerRow, { borderBottomColor: D.border }]} onPress={() => handleReprint(s)}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View>
+                      <Text style={[styles.customerName, { color: D.text }]}>{s.invoice_no}</Text>
+                      <Text style={[styles.customerPhone, { color: D.muted }]}>{s.customer_name ?? 'Walk-in'} · {dayjs(s.created_at).format('HH:mm')}</Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                      <Text style={{ color: D.text, fontWeight: '700', fontSize: 13 }}>KES {s.total.toLocaleString()}</Text>
+                      <MaterialCommunityIcons name="printer" size={16} color={D.accent} />
+                    </View>
+                  </View>
+                </Pressable>
+              ))}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button textColor={D.muted} onPress={() => setReprintDialogOpen(false)}>Cancel</Button>
+          </Dialog.Actions>
+        </Dialog>
+
         {/* Quantity Input Dialog */}
         <Dialog visible={!!qtyDialogItem} onDismiss={() => setQtyDialogItem(null)} style={{ backgroundColor: D.surface }}>
           <Dialog.Title style={{ color: D.text }}>Set Quantity</Dialog.Title>
@@ -1149,4 +1281,7 @@ const styles = StyleSheet.create({
   holdRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1 },
   holdLabel: { fontSize: 14, fontWeight: '600' },
   holdSub: { fontSize: 12, marginTop: 2 },
+  controlMenuItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1 },
+  controlMenuIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  registerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1 },
 });
