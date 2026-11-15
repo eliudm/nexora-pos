@@ -136,15 +136,15 @@ export default function SalesScreen() {
                   {item.status === 'REVERSAL' ? '-' : ''}KES {Math.abs(item.total).toLocaleString()}
                 </Text>
                 {item.status === 'VOIDED' ? (
-                  <Chip compact style={[styles.pmChip, { backgroundColor: '#fce4e4' }]} textStyle={[styles.pmText, { color: '#e53935' }]}>VOIDED</Chip>
+                  <View style={[styles.badge, { backgroundColor: '#e53935' }]}><Text style={styles.badgeText}>VOIDED</Text></View>
                 ) : item.status === 'REVERSED' ? (
-                  <Chip compact style={[styles.pmChip, { backgroundColor: '#fff3cd' }]} textStyle={[styles.pmText, { color: '#856404' }]}>REVERSED</Chip>
+                  <View style={[styles.badge, { backgroundColor: '#f59e0b' }]}><Text style={styles.badgeText}>REVERSED</Text></View>
                 ) : item.status === 'REVERSAL' ? (
-                  <Chip compact style={[styles.pmChip, { backgroundColor: '#fce4e4' }]} textStyle={[styles.pmText, { color: '#e53935' }]}>REVERSAL</Chip>
+                  <View style={[styles.badge, { backgroundColor: '#e53935' }]}><Text style={styles.badgeText}>REVERSAL</Text></View>
                 ) : (
-                  <Chip compact style={[styles.pmChip, { backgroundColor: (PM_COLORS[item.payment_method] ?? '#888') + '22' }]} textStyle={[styles.pmText, { color: PM_COLORS[item.payment_method] ?? '#888' }]}>
-                    {item.payment_method}
-                  </Chip>
+                  <View style={[styles.badge, { backgroundColor: PM_COLORS[item.payment_method] ?? '#888' }]}>
+                    <Text style={styles.badgeText}>{item.payment_method}</Text>
+                  </View>
                 )}
                 {item.status === 'PAID' && (item.sale_cogs ?? 0) > 0 && (() => {
                   const revExVAT = item.total - item.tax_amount;
@@ -322,6 +322,8 @@ function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
     total: { fontSize: 15, fontWeight: '800', color: C.accent },
     pmChip: { marginTop: 4, height: 22 },
     pmText: { fontSize: 10, fontWeight: '700' },
+    badge: { marginTop: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 5 },
+    badgeText: { fontSize: 10, fontWeight: '800', color: '#fff' },
     empty: { padding: 40, alignItems: 'center' },
     emptyText: { color: C.muted },
     receiptDate: { fontSize: 13, color: C.muted, marginBottom: 2 },
