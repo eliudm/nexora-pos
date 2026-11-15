@@ -172,6 +172,8 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       supplier_id INTEGER REFERENCES suppliers(id),
       supplier_name TEXT,
       amount REAL NOT NULL DEFAULT 0,
+      vat_rate REAL NOT NULL DEFAULT 16,
+      vat_amount REAL NOT NULL DEFAULT 0,
       amount_paid REAL NOT NULL DEFAULT 0,
       balance REAL NOT NULL DEFAULT 0,
       due_date TEXT,
@@ -344,6 +346,8 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   await safeAlter('ALTER TABLE products ADD COLUMN low_stock_threshold REAL DEFAULT 0');
   await safeAlter('ALTER TABLE products ADD COLUMN reorder_qty REAL DEFAULT 0');
   await safeAlter('ALTER TABLE sale_items ADD COLUMN cost_price REAL DEFAULT 0');
+  await safeAlter('ALTER TABLE vendor_bills ADD COLUMN vat_rate REAL DEFAULT 16');
+  await safeAlter('ALTER TABLE vendor_bills ADD COLUMN vat_amount REAL DEFAULT 0');
 
   // Seed default admin if none exists
   const userCount = await db.getFirstAsync<{ c: number }>('SELECT COUNT(*) as c FROM users');

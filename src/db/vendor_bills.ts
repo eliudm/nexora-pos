@@ -9,6 +9,8 @@ export interface VendorBill {
   supplier_id: number | null;
   supplier_name: string | null;
   amount: number;
+  vat_rate: number;
+  vat_amount: number;
   amount_paid: number;
   balance: number;
   due_date: string | null;
@@ -50,18 +52,22 @@ export const vendorBillQueries = {
     supplierId?: number | null;
     supplierName?: string | null;
     amount: number;
+    vatRate?: number;
     dueDate?: string;
     notes?: string;
     cashierId?: number | null;
   }): Promise<number> => {
     const db = await getDb();
     const billNo = await nextBillNo();
+    const vatRate = data.vatRate ?? 16;
+    // Extract VAT from VAT-inclusive amount: VAT = amount × rate / (100 + rate)
+    const vatAmount = data.amount * vatRate / (100 + vatRate);
     const r = await db.runAsync(
-      `INSERT INTO vendor_bills (bill_no, po_id, po_no, supplier_id, supplier_name, amount, amount_paid, balance, due_date, notes, cashier_id)
-       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+      `INSERT INTO vendor_bills (bill_no, po_id, po_no, supplier_id, supplier_name, amount, vat_rate, vat_amount, amount_paid, balance, due_date, notes, cashier_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
       [billNo, data.poId ?? null, data.poNo ?? null,
        data.supplierId ?? null, data.supplierName ?? null,
-       data.amount, data.amount,
+       data.amount, vatRate, vatAmount, data.amount,
        data.dueDate ?? null, data.notes ?? null, data.cashierId ?? null],
     );
     return r.lastInsertRowId;
@@ -116,6 +122,17 @@ export const vendorBillQueries = {
       FROM vendor_bills
     `);
     return row ?? { total_outstanding: 0, total_overdue: 0, total_paid_month: 0, count_unpaid: 0 };
+  },
+
+  getInputVAT: async (from: string, to: string): Promise<number> => {
+    const db = await getDb();
+    const row = await db.getFirstAsync<{ total: number }>(
+      `SELECT COALESCE(SUM(vat_amount), 0) as total
+       FROM vendor_bills
+       WHERE date(created_at) BETWEEN ? AND ?`,
+      [from, to],
+    );
+    return row?.total ?? 0;
   },
 
   recordPayment: async (

@@ -13,6 +13,7 @@ import { customerQueries } from '../../../src/db/customers';
 import { cashDrawerQueries } from '../../../src/db/cash_drawer';
 import { shiftQueries } from '../../../src/db/shifts';
 import { getBusinessInfo } from '../../../src/db/settings';
+import { vendorBillQueries } from '../../../src/db/vendor_bills';
 import { useTheme } from '../../../src/context/theme';
 
 type Period = 'today' | 'week' | 'month';
@@ -68,6 +69,12 @@ export default function ReportsScreen() {
     enabled: reportTab === 'profit',
   });
 
+  const { data: inputVATData } = useQuery({
+    queryKey: ['input-vat-report', from, to],
+    queryFn: () => vendorBillQueries.getInputVAT(from, to),
+    enabled: reportTab === 'vat' || reportTab === 'profit',
+  });
+
   const { data: allCustomers } = useQuery({
     queryKey: ['customers-report'],
     queryFn: () => customerQueries.getAll(),
@@ -96,6 +103,7 @@ export default function ReportsScreen() {
   const cashVariance = (parseFloat(actualCash) || 0) - ((openShift?.opening_cash ?? 0) + expectedCash);
 
   const totalCOGS = cogsData ?? 0;
+  const inputVAT = inputVATData ?? 0;
 
   // Stock valuation
   const stockAtCost = (allProducts ?? []).filter((p) => p.track_stock).reduce((s, p) => s + p.cost * p.stock_qty, 0);
@@ -109,6 +117,7 @@ export default function ReportsScreen() {
 
   const totalRevenue = (sales ?? []).reduce((s, x) => s + x.total, 0);
   const totalVAT = (sales ?? []).reduce((s, x) => s + x.tax_amount, 0);
+  const netVATToKRA = totalVAT - inputVAT;
   const cashTotal = (sales ?? []).filter((x) => x.payment_method === 'CASH').reduce((s, x) => s + x.total, 0);
   const mpesaTotal = (sales ?? []).filter((x) => x.payment_method === 'MPESA').reduce((s, x) => s + x.total, 0);
   const creditTotal = (sales ?? []).filter((x) => x.payment_method === 'CREDIT').reduce((s, x) => s + x.total, 0);
@@ -315,20 +324,41 @@ export default function ReportsScreen() {
                   <Text style={[styles.bigVal, { color: (totalRevenue - totalVAT - totalCOGS) >= 0 ? '#22c55e' : '#e53935' }]}>
                     KES {(totalRevenue - totalVAT - totalCOGS).toLocaleString('en-KE', { maximumFractionDigits: 0 })}
                   </Text>
-                  <Text style={styles.bigLabel}>Net Profit (est.)</Text>
+                  <Text style={styles.bigLabel}>Gross Profit (est.)</Text>
                 </View>
                 <Divider style={{ marginVertical: 12 }} />
                 {[
                   { label: 'Revenue (incl. VAT)', value: totalRevenue, color: C.accent },
-                  { label: 'VAT Collected', value: -totalVAT, color: '#f59e0b' },
+                  { label: 'Output VAT (payable)', value: -totalVAT, color: '#f59e0b' },
                   { label: 'Revenue (excl. VAT)', value: totalRevenue - totalVAT, color: '#3b82f6' },
-                  { label: 'Est. Cost of Goods', value: -totalCOGS, color: '#e53935' },
+                  { label: 'Est. Cost of Goods Sold', value: -totalCOGS, color: '#e53935' },
                 ].map(({ label, value, color }) => (
                   <View key={label} style={styles.plRow}>
                     <Text style={styles.plLabel}>{label}</Text>
                     <Text style={[styles.plVal, { color }]}>{value >= 0 ? '' : '-'}KES {Math.abs(value).toLocaleString('en-KE', { maximumFractionDigits: 0 })}</Text>
                   </View>
                 ))}
+              </Card.Content>
+            </Card>
+            <Card style={styles.card}>
+              <Card.Title title="VAT Position" titleStyle={styles.cardTitle} />
+              <Card.Content>
+                <View style={styles.plRow}>
+                  <Text style={styles.plLabel}>Output VAT (from sales)</Text>
+                  <Text style={[styles.plVal, { color: '#f59e0b' }]}>{fmt(totalVAT)}</Text>
+                </View>
+                <View style={styles.plRow}>
+                  <Text style={styles.plLabel}>Input VAT (from purchases)</Text>
+                  <Text style={[styles.plVal, { color: '#22c55e' }]}>{fmt(inputVAT)}</Text>
+                </View>
+                <Divider style={{ marginVertical: 8 }} />
+                <View style={styles.plRow}>
+                  <Text style={[styles.plLabel, { fontWeight: '700', color: C.text }]}>Net VAT Payable to KRA</Text>
+                  <Text style={[styles.plVal, { color: netVATToKRA >= 0 ? '#e53935' : '#22c55e' }]}>
+                    {fmt(Math.abs(netVATToKRA))}
+                    {netVATToKRA < 0 ? ' (credit)' : ''}
+                  </Text>
+                </View>
               </Card.Content>
             </Card>
           </>
@@ -400,19 +430,50 @@ export default function ReportsScreen() {
         {reportTab === 'vat' && (
           <>
             <Card style={styles.card}>
-              <Card.Title title="VAT Summary" titleStyle={styles.cardTitle} />
+              <Card.Title title="Output VAT (Sales)" titleStyle={styles.cardTitle} />
               <Card.Content>
                 <View style={styles.bigStat}>
-                  <Text style={styles.bigVal}>{fmt(totalVAT)}</Text>
-                  <Text style={styles.bigLabel}>Total VAT Collected</Text>
+                  <Text style={[styles.bigVal, { color: '#f59e0b' }]}>{fmt(totalVAT)}</Text>
+                  <Text style={styles.bigLabel}>VAT Collected from Customers</Text>
                 </View>
                 <Divider style={{ marginVertical: 12 }} />
+                <View style={styles.plRow}><Text style={styles.plLabel}>Gross Revenue (incl. VAT)</Text><Text style={[styles.plVal, { color: C.accent }]}>{fmt(totalRevenue)}</Text></View>
                 <View style={styles.plRow}><Text style={styles.plLabel}>Taxable Sales (excl. VAT)</Text><Text style={styles.plVal}>{fmt(totalRevenue - totalVAT)}</Text></View>
-                <View style={styles.plRow}><Text style={styles.plLabel}>VAT at 16%</Text><Text style={[styles.plVal, { color: '#f59e0b' }]}>{fmt(totalVAT)}</Text></View>
-                <View style={styles.plRow}><Text style={styles.plLabel}>Gross Revenue</Text><Text style={[styles.plVal, { color: C.accent }]}>{fmt(totalRevenue)}</Text></View>
+                <View style={styles.plRow}><Text style={styles.plLabel}>Output VAT @ 16%</Text><Text style={[styles.plVal, { color: '#f59e0b' }]}>{fmt(totalVAT)}</Text></View>
+              </Card.Content>
+            </Card>
+            <Card style={styles.card}>
+              <Card.Title title="Input VAT (Purchases)" titleStyle={styles.cardTitle} />
+              <Card.Content>
+                <View style={styles.bigStat}>
+                  <Text style={[styles.bigVal, { color: '#22c55e' }]}>{fmt(inputVAT)}</Text>
+                  <Text style={styles.bigLabel}>Reclaimable VAT on Vendor Bills</Text>
+                </View>
                 <Divider style={{ marginVertical: 12 }} />
-                <Text style={{ fontSize: 11, color: '#aaa', lineHeight: 16 }}>
-                  This VAT summary is for your KRA iTax filing. Submit through your KRA portal or eTIMS system.
+                <Text style={{ fontSize: 12, color: C.muted, lineHeight: 18 }}>
+                  Input VAT is extracted from vendor bills recorded in this period using the VAT-inclusive treatment (VAT = amount × rate / (100 + rate)).
+                </Text>
+              </Card.Content>
+            </Card>
+            <Card style={styles.card}>
+              <Card.Title title="Net VAT Payable to KRA" titleStyle={[styles.cardTitle, { color: netVATToKRA >= 0 ? '#e53935' : '#22c55e' }]} />
+              <Card.Content>
+                <View style={styles.bigStat}>
+                  <Text style={[styles.bigVal, { color: netVATToKRA >= 0 ? '#e53935' : '#22c55e' }]}>
+                    {fmt(Math.abs(netVATToKRA))}
+                  </Text>
+                  <Text style={styles.bigLabel}>{netVATToKRA >= 0 ? 'Payable to KRA' : 'VAT Credit (carry forward)'}</Text>
+                </View>
+                <Divider style={{ marginVertical: 12 }} />
+                <View style={styles.plRow}><Text style={styles.plLabel}>Output VAT</Text><Text style={[styles.plVal, { color: '#f59e0b' }]}>{fmt(totalVAT)}</Text></View>
+                <View style={styles.plRow}><Text style={styles.plLabel}>Less: Input VAT</Text><Text style={[styles.plVal, { color: '#22c55e' }]}>-{fmt(inputVAT)}</Text></View>
+                <Divider style={{ marginVertical: 8 }} />
+                <View style={styles.plRow}>
+                  <Text style={[styles.plLabel, { fontWeight: '700', color: C.text }]}>Net VAT</Text>
+                  <Text style={[styles.plVal, { color: netVATToKRA >= 0 ? '#e53935' : '#22c55e' }]}>{fmt(netVATToKRA)}</Text>
+                </View>
+                <Text style={{ fontSize: 11, color: '#aaa', lineHeight: 16, marginTop: 8 }}>
+                  File this via KRA iTax or your eTIMS system. Keep all vendor bills and receipts as supporting documents.
                 </Text>
               </Card.Content>
             </Card>
