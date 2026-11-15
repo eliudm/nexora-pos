@@ -52,6 +52,15 @@ export default function SalesScreen() {
     enabled: !!selected,
   });
 
+  // Compute profit from loaded detail items
+  const detailCOGS = (detail?.items ?? []).reduce(
+    (s, i) => s + (i.cost_price / (1 + i.vat_rate / 100)) * i.qty, 0,
+  );
+  const detailRevExVAT = (detail?.total ?? 0) - (detail?.tax_amount ?? 0);
+  const detailProfit = detailRevExVAT - detailCOGS;
+  const detailMarginPct = detailRevExVAT > 0 ? (detailProfit / detailRevExVAT) * 100 : 0;
+  const hasCostData = (detail?.items ?? []).some((i) => i.cost_price > 0);
+
   const presets = [
     { label: 'Today', from: dayjs().format('YYYY-MM-DD'), to: dayjs().format('YYYY-MM-DD') },
     { label: 'Yesterday', from: dayjs().subtract(1, 'day').format('YYYY-MM-DD'), to: dayjs().subtract(1, 'day').format('YYYY-MM-DD') },
@@ -111,6 +120,17 @@ export default function SalesScreen() {
                     {item.payment_method}
                   </Chip>
                 )}
+                {item.status === 'PAID' && (item.sale_cogs ?? 0) > 0 && (() => {
+                  const revExVAT = item.total - item.tax_amount;
+                  const profit = revExVAT - (item.sale_cogs ?? 0);
+                  const pct = revExVAT > 0 ? (profit / revExVAT) * 100 : 0;
+                  const color = pct >= 0 ? '#22c55e' : '#e53935';
+                  return (
+                    <Text style={{ fontSize: 11, color, fontWeight: '700', marginTop: 2 }}>
+                      {pct >= 0 ? '+' : ''}{pct.toFixed(1)}% margin
+                    </Text>
+                  );
+                })()}
               </View>
             </Card.Content>
           </Card>
@@ -136,14 +156,32 @@ export default function SalesScreen() {
                 <DataTable.Title>Item</DataTable.Title>
                 <DataTable.Title numeric>Qty</DataTable.Title>
                 <DataTable.Title numeric>Total</DataTable.Title>
+                {hasCostData && <DataTable.Title numeric>Margin</DataTable.Title>}
               </DataTable.Header>
-              {(detail?.items ?? []).map((item, i) => (
-                <DataTable.Row key={i}>
-                  <DataTable.Cell>{item.product_name}</DataTable.Cell>
-                  <DataTable.Cell numeric>{item.qty}</DataTable.Cell>
-                  <DataTable.Cell numeric>KES {item.total.toFixed(0)}</DataTable.Cell>
-                </DataTable.Row>
-              ))}
+              {(detail?.items ?? []).map((item, i) => {
+                const vatF = item.vat_rate / 100;
+                const itemRevExVAT = item.total / (1 + vatF);
+                const itemCOGS = (item.cost_price / (1 + vatF)) * item.qty;
+                const itemProfit = itemRevExVAT - itemCOGS;
+                const itemPct = item.cost_price > 0 && itemRevExVAT > 0
+                  ? (itemProfit / itemRevExVAT) * 100 : null;
+                return (
+                  <DataTable.Row key={i}>
+                    <DataTable.Cell>{item.product_name}</DataTable.Cell>
+                    <DataTable.Cell numeric>{item.qty}</DataTable.Cell>
+                    <DataTable.Cell numeric>KES {item.total.toFixed(0)}</DataTable.Cell>
+                    {hasCostData && (
+                      <DataTable.Cell numeric>
+                        {itemPct !== null
+                          ? <Text style={{ fontSize: 12, color: itemPct >= 0 ? '#22c55e' : '#e53935', fontWeight: '700' }}>
+                              {itemPct >= 0 ? '+' : ''}{itemPct.toFixed(1)}%
+                            </Text>
+                          : <Text style={{ fontSize: 12, color: '#aaa' }}>—</Text>}
+                      </DataTable.Cell>
+                    )}
+                  </DataTable.Row>
+                );
+              })}
             </DataTable>
 
             <Divider style={{ marginVertical: 10 }} />
@@ -164,6 +202,28 @@ export default function SalesScreen() {
               </View>
               {selected?.mpesa_ref && (
                 <View style={styles.rRow}><Text style={styles.rLabel}>Ref</Text><Text>{selected.mpesa_ref}</Text></View>
+              )}
+              {hasCostData && selected?.status === 'PAID' && (
+                <>
+                  <Divider style={{ marginVertical: 8 }} />
+                  <View style={styles.rRow}>
+                    <Text style={styles.rLabel}>Revenue (excl. VAT)</Text>
+                    <Text style={{ fontSize: 13, color: C.text }}>KES {detailRevExVAT.toFixed(0)}</Text>
+                  </View>
+                  <View style={styles.rRow}>
+                    <Text style={styles.rLabel}>Est. Cost (excl. VAT)</Text>
+                    <Text style={{ fontSize: 13, color: '#e53935' }}>-KES {detailCOGS.toFixed(0)}</Text>
+                  </View>
+                  <View style={[styles.rRow, { marginTop: 2 }]}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: C.text }}>Gross Profit</Text>
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: detailProfit >= 0 ? '#22c55e' : '#e53935' }}>
+                      {detailProfit < 0 ? '-' : ''}KES {Math.abs(detailProfit).toFixed(0)}
+                      {'  '}<Text style={{ fontSize: 12, fontWeight: '600' }}>
+                        ({detailMarginPct >= 0 ? '+' : ''}{detailMarginPct.toFixed(1)}%)
+                      </Text>
+                    </Text>
+                  </View>
+                </>
               )}
             </View>
           </Dialog.Content>

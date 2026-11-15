@@ -40,6 +40,7 @@ export interface Sale {
   note: string | null;
   created_at: string;
   items?: CartItem[];
+  sale_cogs?: number;
 }
 
 let _invoiceCounter = 0;
@@ -144,7 +145,11 @@ export const salesQueries = {
       params.push(from, to + 'T23:59:59');
     }
     return db.getAllAsync<Sale>(`
-      SELECT s.*, c.name as customer_name, u.name as cashier_name
+      SELECT s.*, c.name as customer_name, u.name as cashier_name,
+        COALESCE((
+          SELECT SUM((si.cost_price / (1.0 + si.vat_rate / 100.0)) * si.qty)
+          FROM sale_items si WHERE si.sale_id = s.id AND si.cost_price > 0
+        ), 0) as sale_cogs
       FROM sales s
       LEFT JOIN customers c ON s.customer_id = c.id
       LEFT JOIN users u ON s.cashier_id = u.id
