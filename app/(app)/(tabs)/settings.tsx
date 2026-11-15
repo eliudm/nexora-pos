@@ -88,6 +88,8 @@ export default function SettingsScreen() {
   // Cash drawer
   const [drawerLogOpen, setDrawerLogOpen] = useState(false);
   const [drawerEntryOpen, setDrawerEntryOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [subscriptionOpen, setSubscriptionOpen] = useState(false);
   const [drawerType, setDrawerType] = useState<'IN' | 'OUT'>('IN');
   const [drawerAmount, setDrawerAmount] = useState('');
   const [drawerNote, setDrawerNote] = useState('');
@@ -518,9 +520,21 @@ export default function SettingsScreen() {
 
           <Text style={styles.section}>About</Text>
           <Card style={styles.card}>
-            <List.Item title="Nexora POS" description="Version 1.0.0 — Standalone Android POS" left={(p) => <List.Icon {...p} icon="cash-register" color={C.accent} />} />
+            <List.Item
+              title="Nexora POS"
+              description="Version 1.0.0 — Standalone Android POS"
+              left={(p) => <List.Icon {...p} icon="cash-register" color={C.accent} />}
+              right={(p) => <List.Icon {...p} icon="chevron-right" />}
+              onPress={() => setAboutOpen(true)}
+            />
             <Divider />
-            <List.Item title="Subscription" description="KES 600/month via Google Play" left={(p) => <List.Icon {...p} icon="google-play" color={C.accent} />} />
+            <List.Item
+              title="Subscription"
+              description="KES 600/month · Manage your plan"
+              left={(p) => <List.Icon {...p} icon="star-circle" color="#f59e0b" />}
+              right={(p) => <List.Icon {...p} icon="chevron-right" />}
+              onPress={() => setSubscriptionOpen(true)}
+            />
           </Card>
 
           <View style={{ height: 40 }} />
@@ -602,6 +616,73 @@ export default function SettingsScreen() {
             </ScrollView>
           </Dialog.Content>
           <Dialog.Actions><Button onPress={() => setDrawerLogOpen(false)}>Close</Button></Dialog.Actions>
+        </Dialog>
+
+        {/* About Dialog */}
+        <Dialog visible={aboutOpen} onDismiss={() => setAboutOpen(false)}>
+          <Dialog.Title>About Nexora POS</Dialog.Title>
+          <Dialog.Content>
+            <View style={{ alignItems: 'center', paddingVertical: 8, gap: 6 }}>
+              <View style={{ width: 64, height: 64, borderRadius: 18, backgroundColor: C.accent + '22', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
+                <List.Icon icon="cash-register" color={C.accent} />
+              </View>
+              <Text style={{ fontSize: 20, fontWeight: '800', color: C.text }}>Nexora POS</Text>
+              <Text style={{ fontSize: 13, color: C.muted }}>Version 1.0.0 (Build 1)</Text>
+              <Text style={{ fontSize: 12, color: C.muted, marginTop: 4, textAlign: 'center', lineHeight: 18 }}>
+                A modern point-of-sale system built for Kenyan small businesses. Manage sales, inventory, customers, and reports — all offline.
+              </Text>
+            </View>
+            <Divider style={{ marginVertical: 14 }} />
+            <List.Item title="Developer" description="Nexora Technologies" left={(p) => <List.Icon {...p} icon="code-braces" color={C.muted} />} style={{ paddingHorizontal: 0 }} />
+            <List.Item title="Support" description="support@nexorapos.com" left={(p) => <List.Icon {...p} icon="email-outline" color={C.muted} />} onPress={() => Linking.openURL('mailto:support@nexorapos.com')} style={{ paddingHorizontal: 0 }} />
+            <List.Item title="Privacy Policy" description="nexorapos.com/privacy" left={(p) => <List.Icon {...p} icon="shield-check-outline" color={C.muted} />} onPress={() => Linking.openURL('https://nexorapos.com/privacy')} style={{ paddingHorizontal: 0 }} />
+            <Text style={{ fontSize: 11, color: C.muted, textAlign: 'center', marginTop: 8 }}>© 2025 Nexora Technologies. All rights reserved.</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setAboutOpen(false)}>Close</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Subscription Dialog */}
+        <Dialog visible={subscriptionOpen} onDismiss={() => setSubscriptionOpen(false)}>
+          <Dialog.Title>Subscription</Dialog.Title>
+          <Dialog.Content>
+            <View style={{ backgroundColor: C.accent + '14', borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: C.accent + '33' }}>
+              <Text style={{ fontSize: 12, color: C.accent, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 }}>Nexora Pro</Text>
+              <Text style={{ fontSize: 24, fontWeight: '900', color: C.text, marginTop: 4 }}>KES 600 <Text style={{ fontSize: 14, fontWeight: '400', color: C.muted }}>/month</Text></Text>
+              <Text style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Billed monthly via Google Play</Text>
+            </View>
+            {[
+              'Unlimited sales & products',
+              'Multi-user accounts',
+              'AI Smart Insights',
+              'Full reports & analytics',
+              'Receipt printing',
+              'M-Pesa (Daraja) integration',
+              'eTIMS / KRA reporting',
+              'Backup & restore',
+            ].map((f) => (
+              <View key={f} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <List.Icon icon="check-circle" color="#22c55e" style={{ margin: 0 }} />
+                <Text style={{ fontSize: 13, color: C.text }}>{f}</Text>
+              </View>
+            ))}
+          </Dialog.Content>
+          <Dialog.Actions style={{ flexDirection: 'column', gap: 8, paddingHorizontal: 16, paddingBottom: 12 }}>
+            <Button
+              mode="contained"
+              buttonColor={C.accent}
+              style={{ width: '100%', borderRadius: 10 }}
+              icon="google-play"
+              onPress={() => {
+                setSubscriptionOpen(false);
+                Linking.openURL('https://play.google.com/store/apps/details?id=com.nexora.pos');
+              }}
+            >
+              Manage on Google Play
+            </Button>
+            <Button onPress={() => setSubscriptionOpen(false)} style={{ width: '100%' }}>Close</Button>
+          </Dialog.Actions>
         </Dialog>
 
         {/* Stock Log Dialog */}
