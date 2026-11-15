@@ -164,6 +164,34 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       total_cost REAL NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS vendor_bills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bill_no TEXT NOT NULL UNIQUE,
+      po_id INTEGER REFERENCES purchase_orders(id),
+      po_no TEXT,
+      supplier_id INTEGER REFERENCES suppliers(id),
+      supplier_name TEXT,
+      amount REAL NOT NULL DEFAULT 0,
+      amount_paid REAL NOT NULL DEFAULT 0,
+      balance REAL NOT NULL DEFAULT 0,
+      due_date TEXT,
+      status TEXT NOT NULL DEFAULT 'UNPAID',
+      notes TEXT,
+      cashier_id INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS vendor_bill_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bill_id INTEGER NOT NULL REFERENCES vendor_bills(id) ON DELETE CASCADE,
+      amount REAL NOT NULL,
+      payment_method TEXT NOT NULL DEFAULT 'CASH',
+      reference TEXT,
+      notes TEXT,
+      cashier_id INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS hold_sales (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       label TEXT,

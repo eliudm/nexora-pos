@@ -21,6 +21,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
     title: 'Purchasing',
     items: [
       { label: 'Purchase Orders', description: 'Order stock from suppliers', icon: 'file-document-outline', route: '/purchase-orders', color: '#6f67ff' },
+      { label: 'Vendor Bills', description: 'Track amounts owed to suppliers', icon: 'file-document-edit-outline', route: '/vendor-bills', color: '#e53935' },
       { label: 'Suppliers', description: 'Manage your suppliers', icon: 'truck-delivery-outline', route: '/suppliers', color: '#3b82f6' },
     ],
   },

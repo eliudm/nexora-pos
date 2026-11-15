@@ -4,9 +4,11 @@ import { Text, Button, Appbar, Card, Portal, Dialog, TextInput, FAB, Chip, Divid
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { poQueries, POItem, PurchaseOrder } from '../../src/db/purchase_orders';
 import { supplierQueries, Supplier } from '../../src/db/suppliers';
 import { productQueries, Product } from '../../src/db/products';
+import { vendorBillQueries } from '../../src/db/vendor_bills';
 import { useSession } from '../../src/context/session';
 import { useTheme } from '../../src/context/theme';
 import dayjs from 'dayjs';
@@ -87,10 +89,18 @@ export default function PurchaseOrdersScreen() {
         .filter((r) => r.qtyReceived > 0);
       if (received.length === 0) throw new Error('Enter at least one received quantity');
       await poQueries.receive(detailPo.id, received, user?.id);
+      // Auto-create vendor bill for the PO amount owed to supplier
+      await vendorBillQueries.createFromPO(
+        detailPo.id, detailPo.po_no,
+        detailPo.supplier_id ?? null, detailPo.supplier_name ?? null,
+        detailPo.total_amount, user?.id ?? null,
+      );
     },
     onSuccess: async () => {
       qc.invalidateQueries({ queryKey: ['purchase-orders'] });
       qc.invalidateQueries({ queryKey: ['products'] });
+      qc.invalidateQueries({ queryKey: ['vendor-bills'] });
+      qc.invalidateQueries({ queryKey: ['vendor-bills-summary'] });
       setReceiveVisible(false);
       setReceiveCounts({});
       const updated = await poQueries.getById(detailPo!.id);
@@ -370,6 +380,11 @@ export default function PurchaseOrdersScreen() {
           </Dialog.ScrollArea>
           <Dialog.Actions style={{ flexWrap: 'wrap', gap: 4 }}>
             <Button onPress={() => setDetailPo(null)}>Close</Button>
+            {(detailPo?.status === 'RECEIVED' || detailPo?.status === 'PARTIAL') && (
+              <Button icon="file-invoice" onPress={() => { setDetailPo(null); router.push('/vendor-bills'); }}>
+                View Bill
+              </Button>
+            )}
             {detailPo?.status !== 'RECEIVED' && detailPo?.status !== 'CANCELLED' && (
               <>
                 <Button
@@ -391,7 +406,7 @@ export default function PurchaseOrdersScreen() {
           <Dialog.Title>Receive Stock — {detailPo?.po_no}</Dialog.Title>
           <Dialog.Content>
             <Text style={styles.receiveNote}>
-              Enter quantities received. Product cost prices will be updated to the unit cost on receipt.
+              Enter quantities received. Product costs will update and a Vendor Bill will be created automatically for payment tracking.
             </Text>
           </Dialog.Content>
           <Dialog.ScrollArea>
