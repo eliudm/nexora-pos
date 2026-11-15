@@ -84,20 +84,22 @@ export const poQueries = {
 
   receive: async (poId: number, receivedItems: { itemId: number; qtyReceived: number }[], cashierId?: number): Promise<void> => {
     const db = await getDb();
+    const po = await db.getFirstAsync<{ po_no: string }>('SELECT po_no FROM purchase_orders WHERE id = ?', [poId]);
+    const poRef = po?.po_no ?? `PO#${poId}`;
     for (const ri of receivedItems) {
       const item = await db.getFirstAsync<POItem>('SELECT * FROM purchase_order_items WHERE id = ?', [ri.itemId]);
       if (!item) continue;
       const newReceived = (item.qty_received ?? 0) + ri.qtyReceived;
       await db.runAsync('UPDATE purchase_order_items SET qty_received = ? WHERE id = ?', [newReceived, ri.itemId]);
       if (item.product_id) {
-        await db.runAsync('UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?', [ri.qtyReceived, item.product_id]);
+        await db.runAsync('UPDATE products SET stock_qty = stock_qty + ?, cost = ? WHERE id = ?',
+          [ri.qtyReceived, item.unit_cost, item.product_id]);
         await db.runAsync(
           'INSERT INTO stock_log (product_id, product_name, change_qty, balance_after, reason, user_id) SELECT ?, ?, ?, stock_qty, ?, ? FROM products WHERE id = ?',
-          [item.product_id, item.product_name, ri.qtyReceived, `PO received`, cashierId ?? null, item.product_id],
+          [item.product_id, item.product_name, ri.qtyReceived, `Received: ${poRef}`, cashierId ?? null, item.product_id],
         );
       }
     }
-    // Check if fully received
     const remaining = await db.getFirstAsync<{ c: number }>(
       'SELECT COUNT(*) as c FROM purchase_order_items WHERE po_id = ? AND qty_received < qty_ordered', [poId],
     );
