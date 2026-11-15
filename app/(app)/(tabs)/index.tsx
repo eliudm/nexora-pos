@@ -8,6 +8,7 @@ import dayjs from 'dayjs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { salesQueries } from '../../../src/db/sales';
 import { getBusinessInfo } from '../../../src/db/settings';
+import { productQueries } from '../../../src/db/products';
 import { useTheme } from '../../../src/context/theme';
 
 export default function DashboardScreen() {
@@ -34,6 +35,11 @@ export default function DashboardScreen() {
     queryKey: ['biz-info'],
     queryFn: getBusinessInfo,
   });
+
+  const { data: outOfStock = [] } = useQuery({ queryKey: ['alerts-oos'], queryFn: productQueries.getOutOfStock });
+  const { data: lowStock = [] } = useQuery({ queryKey: ['alerts-low'], queryFn: productQueries.getLowStock });
+  const { data: expiring = [] } = useQuery({ queryKey: ['alerts-expiry'], queryFn: () => productQueries.getExpiring(30) });
+  const alertCount = outOfStock.length + lowStock.length + expiring.length;
 
   const onRefresh = useCallback(() => { refetchSummary(); }, [refetchSummary]);
   const fmt = (n: number) => `KES ${(n || 0).toLocaleString('en-KE', { maximumFractionDigits: 0 })}`;
@@ -105,6 +111,31 @@ export default function DashboardScreen() {
             </Pressable>
           ))}
         </View>
+
+        {/* Alerts Banner */}
+        <Pressable
+          style={[styles.alertCard, { backgroundColor: alertCount > 0 ? '#e5393514' : '#22c55e14', borderColor: alertCount > 0 ? '#e5393540' : '#22c55e40' }]}
+          onPress={() => router.push('/alerts' as any)}
+        >
+          <View style={[styles.alertIconWrap, { backgroundColor: alertCount > 0 ? '#e5393522' : '#22c55e22' }]}>
+            <MaterialCommunityIcons name="bell-outline" size={20} color={alertCount > 0 ? '#e53935' : '#22c55e'} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.alertTitle, { color: alertCount > 0 ? '#e53935' : '#22c55e' }]}>
+              {alertCount > 0 ? `${alertCount} Alert${alertCount !== 1 ? 's' : ''}` : 'All Clear'}
+            </Text>
+            <Text style={[styles.alertSub, { color: D.muted }]}>
+              {alertCount > 0
+                ? [
+                    outOfStock.length > 0 && `${outOfStock.length} out of stock`,
+                    lowStock.length > 0 && `${lowStock.length} low stock`,
+                    expiring.length > 0 && `${expiring.length} expiring`,
+                  ].filter(Boolean).join(' · ')
+                : 'No stock or expiry issues'}
+            </Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={18} color={D.muted} />
+        </Pressable>
 
         {/* Quick Links */}
         <Text style={[styles.sectionTitle, { color: D.muted }]}>Quick Actions</Text>
@@ -187,6 +218,10 @@ const styles = StyleSheet.create({
   dateText: { fontSize: 12, marginTop: 2 },
   posBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
   posBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  alertCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 12, marginBottom: 16, borderRadius: 14, padding: 14, borderWidth: 1, gap: 12 },
+  alertIconWrap: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  alertTitle: { fontSize: 14, fontWeight: '800' },
+  alertSub: { fontSize: 12, marginTop: 2 },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: 12, gap: 10 },
   statCard: { flex: 1, minWidth: '44%', borderRadius: 14, padding: 14, borderWidth: 1 },
   statIconWrap: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
