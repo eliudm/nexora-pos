@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { View, StyleSheet, FlatList, Alert, Pressable, TextInput as RNTextInput, Platform } from 'react-native';
+import { View, StyleSheet, FlatList, Alert, Pressable, TextInput as RNTextInput, Platform, ScrollView } from 'react-native';
 import { Text, Button, Appbar, Searchbar, Chip, Portal, Dialog, RadioButton, ActivityIndicator, IconButton, Badge } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -68,6 +68,8 @@ export default function POSScreen() {
   const [reprintSale, setReprintSale] = useState<any>(null);
   const [reprintDialogOpen, setReprintDialogOpen] = useState(false);
   const [reprintSearch, setReprintSearch] = useState('');
+  const [ordersDialogOpen, setOrdersDialogOpen] = useState(false);
+  const [ordersSearch, setOrdersSearch] = useState('');
 
   // Quantity input dialog
   const [qtyDialogItem, setQtyDialogItem] = useState<CartItem | null>(null);
@@ -151,6 +153,12 @@ export default function POSScreen() {
     queryKey: ['recent-sales-reprint', reprintSearch],
     queryFn: () => salesQueries.getAll(todayStr, todayStr, 50),
     enabled: reprintDialogOpen,
+  });
+
+  const { data: allOrders } = useQuery({
+    queryKey: ['all-orders', ordersSearch],
+    queryFn: () => salesQueries.getAll(undefined, undefined, 100),
+    enabled: ordersDialogOpen,
   });
 
   const handleReload = () => {
@@ -883,12 +891,65 @@ export default function POSScreen() {
           </Dialog.Actions>
         </Dialog>
 
+        {/* Orders History */}
+        <Dialog visible={ordersDialogOpen} onDismiss={() => setOrdersDialogOpen(false)} style={{ backgroundColor: D.surface, maxHeight: '85%' }}>
+          <Dialog.Title style={{ color: D.text }}>Orders</Dialog.Title>
+          <Dialog.Content style={{ paddingHorizontal: 0, paddingBottom: 0 }}>
+            <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+              <Searchbar
+                placeholder="Search invoice or customer..."
+                value={ordersSearch}
+                onChangeText={setOrdersSearch}
+                style={{ backgroundColor: D.elevated }}
+              />
+            </View>
+            <ScrollView style={{ maxHeight: 420 }}>
+              {(allOrders ?? [])
+                .filter((s) => !ordersSearch.trim() ||
+                  s.invoice_no.toLowerCase().includes(ordersSearch.toLowerCase()) ||
+                  (s.customer_name ?? '').toLowerCase().includes(ordersSearch.toLowerCase()))
+                .slice(0, 50)
+                .map((s) => {
+                  const statusColor = s.status === 'PAID' ? '#4caf50'
+                    : s.status === 'VOIDED' ? '#e53935'
+                    : s.status === 'REVERSED' ? '#ff9800'
+                    : s.status === 'REVERSAL' ? '#e53935'
+                    : D.muted;
+                  return (
+                    <View key={s.id} style={[styles.customerRow, { paddingHorizontal: 16, borderBottomColor: D.border }]}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <View style={{ flex: 1 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Text style={[styles.customerName, { color: D.text }]}>{s.invoice_no}</Text>
+                            <View style={{ backgroundColor: statusColor + '22', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                              <Text style={{ color: statusColor, fontSize: 10, fontWeight: '800' }}>{s.status}</Text>
+                            </View>
+                          </View>
+                          <Text style={[styles.customerPhone, { color: D.muted, marginTop: 2 }]}>
+                            {s.customer_name ?? 'Walk-in'} · {s.payment_method} · {dayjs(s.created_at).format('D MMM, HH:mm')}
+                          </Text>
+                        </View>
+                        <Text style={{ color: D.text, fontWeight: '700', fontSize: 14 }}>KES {s.total.toLocaleString()}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              {(allOrders ?? []).length === 0 && (
+                <Text style={{ color: D.muted, textAlign: 'center', padding: 24 }}>No orders found</Text>
+              )}
+            </ScrollView>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button textColor={D.muted} onPress={() => setOrdersDialogOpen(false)}>Close</Button>
+          </Dialog.Actions>
+        </Dialog>
+
         {/* Controls Menu */}
         <Dialog visible={controlsMenuOpen} onDismiss={() => setControlsMenuOpen(false)} style={{ backgroundColor: D.surface }}>
           <Dialog.Title style={{ color: D.text }}>Controls</Dialog.Title>
           <Dialog.Content style={{ paddingHorizontal: 0, paddingBottom: 0 }}>
             {[
-              { icon: 'package-variant', label: 'Add Orders', sub: 'Resume a parked sale', onPress: () => { setControlsMenuOpen(false); setResumeDialogOpen(true); } },
+              { icon: 'package-variant', label: 'Orders', sub: 'View all previous orders', onPress: () => { setControlsMenuOpen(false); setOrdersDialogOpen(true); } },
               { icon: 'printer-outline', label: 'Reprint Receipt', sub: 'Reprint a recent sale', onPress: () => { setControlsMenuOpen(false); setReprintDialogOpen(true); } },
               { icon: 'refresh', label: 'Reload Products', sub: 'Refresh product catalogue', onPress: handleReload },
               { icon: 'cash-register', label: 'Close Register', sub: "View today's sales totals", onPress: () => { setControlsMenuOpen(false); setCloseRegisterOpen(true); } },
