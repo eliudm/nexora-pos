@@ -70,6 +70,9 @@ export default function POSScreen() {
   const [reprintSearch, setReprintSearch] = useState('');
   const [ordersDialogOpen, setOrdersDialogOpen] = useState(false);
   const [ordersSearch, setOrdersSearch] = useState('');
+  const [orderDetailSale, setOrderDetailSale] = useState<any>(null);
+  const [orderReverseOpen, setOrderReverseOpen] = useState(false);
+  const [orderReverseReason, setOrderReverseReason] = useState('');
 
   // Quantity input dialog
   const [qtyDialogItem, setQtyDialogItem] = useState<CartItem | null>(null);
@@ -159,6 +162,28 @@ export default function POSScreen() {
     queryKey: ['all-orders', ordersSearch],
     queryFn: () => salesQueries.getAll(undefined, undefined, 100),
     enabled: ordersDialogOpen,
+  });
+
+  const { data: orderDetail } = useQuery({
+    queryKey: ['order-detail', orderDetailSale?.id],
+    queryFn: () => salesQueries.getById(orderDetailSale!.id),
+    enabled: !!orderDetailSale,
+  });
+
+  const orderReverseMutation = useMutation({
+    mutationFn: ({ saleId, reason }: { saleId: number; reason: string }) =>
+      salesQueries.reverseSale(saleId, reason, user?.id ?? null),
+    onSuccess: (reversalInvoiceNo) => {
+      qc.invalidateQueries({ queryKey: ['all-orders'] });
+      qc.invalidateQueries({ queryKey: ['sales'] });
+      qc.invalidateQueries({ queryKey: ['daily-summary'] });
+      qc.invalidateQueries({ queryKey: ['products'] });
+      setOrderReverseOpen(false);
+      setOrderReverseReason('');
+      setOrderDetailSale(null);
+      Alert.alert('Reversed', `Reversal posted as ${reversalInvoiceNo}. Stock restored.`);
+    },
+    onError: (e: any) => Alert.alert('Error', e.message),
   });
 
   const handleReload = () => {
@@ -916,8 +941,12 @@ export default function POSScreen() {
                     : s.status === 'REVERSAL' ? '#e53935'
                     : D.muted;
                   return (
-                    <View key={s.id} style={[styles.customerRow, { paddingHorizontal: 16, borderBottomColor: D.border }]}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Pressable
+                      key={s.id}
+                      style={({ pressed }) => [styles.customerRow, { paddingHorizontal: 16, borderBottomColor: D.border, backgroundColor: pressed ? D.elevated : 'transparent' }]}
+                      onPress={() => setOrderDetailSale(s)}
+                    >
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                         <View style={{ flex: 1 }}>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                             <Text style={[styles.customerName, { color: D.text }]}>{s.invoice_no}</Text>
@@ -929,9 +958,12 @@ export default function POSScreen() {
                             {s.customer_name ?? 'Walk-in'} · {s.payment_method} · {dayjs(s.created_at).format('D MMM, HH:mm')}
                           </Text>
                         </View>
-                        <Text style={{ color: D.text, fontWeight: '700', fontSize: 14 }}>KES {s.total.toLocaleString()}</Text>
+                        <View style={{ alignItems: 'flex-end', flexDirection: 'row', gap: 4 }}>
+                          <Text style={{ color: D.text, fontWeight: '700', fontSize: 14 }}>KES {s.total.toLocaleString()}</Text>
+                          <MaterialCommunityIcons name="chevron-right" size={16} color={D.muted} />
+                        </View>
                       </View>
-                    </View>
+                    </Pressable>
                   );
                 })}
               {(allOrders ?? []).length === 0 && (
@@ -941,6 +973,137 @@ export default function POSScreen() {
           </Dialog.Content>
           <Dialog.Actions>
             <Button textColor={D.muted} onPress={() => setOrdersDialogOpen(false)}>Close</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Order Detail */}
+        <Dialog visible={!!orderDetailSale} onDismiss={() => setOrderDetailSale(null)} style={{ backgroundColor: D.surface, maxHeight: '90%' }}>
+          <Dialog.Title style={{ color: D.text }}>
+            {orderDetailSale?.invoice_no}
+            {'  '}
+            {orderDetailSale && (() => {
+              const sc = orderDetailSale.status === 'PAID' ? '#4caf50'
+                : orderDetailSale.status === 'VOIDED' ? '#e53935'
+                : orderDetailSale.status === 'REVERSED' ? '#ff9800'
+                : '#e53935';
+              return (
+                <View style={{ backgroundColor: sc + '22', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, display: 'flex' }}>
+                  <Text style={{ color: sc, fontSize: 11, fontWeight: '800' }}>{orderDetailSale.status}</Text>
+                </View>
+              );
+            })()}
+          </Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ color: D.muted, fontSize: 12, marginBottom: 2 }}>{dayjs(orderDetailSale?.created_at).format('D MMM YYYY, HH:mm')}</Text>
+            {orderDetailSale?.customer_name && (
+              <Text style={{ color: D.muted, fontSize: 12, marginBottom: 8 }}>Customer: {orderDetailSale.customer_name}</Text>
+            )}
+            <ScrollView style={{ maxHeight: 320 }}>
+              {/* Items */}
+              {orderDetail ? (
+                <>
+                  <View style={{ flexDirection: 'row', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: D.border }}>
+                    <Text style={{ flex: 3, fontSize: 11, fontWeight: '700', color: D.muted }}>ITEM</Text>
+                    <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: D.muted, textAlign: 'center' }}>QTY</Text>
+                    <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: D.muted, textAlign: 'right' }}>TOTAL</Text>
+                  </View>
+                  {(orderDetail.items ?? []).map((item: any, idx: number) => (
+                    <View key={idx} style={{ flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: D.border + '66' }}>
+                      <View style={{ flex: 3 }}>
+                        <Text style={{ color: D.text, fontSize: 13, fontWeight: '600' }}>{item.product_name}</Text>
+                        <Text style={{ color: D.muted, fontSize: 11 }}>KES {item.unit_price?.toLocaleString()} each</Text>
+                      </View>
+                      <Text style={{ flex: 1, color: D.text, fontSize: 13, textAlign: 'center' }}>{item.qty}</Text>
+                      <Text style={{ flex: 1, color: D.text, fontSize: 13, fontWeight: '700', textAlign: 'right' }}>KES {item.total?.toFixed(0)}</Text>
+                    </View>
+                  ))}
+                  {/* Totals */}
+                  <View style={{ marginTop: 12, gap: 4 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text style={{ color: D.muted, fontSize: 13 }}>Subtotal</Text>
+                      <Text style={{ color: D.text, fontSize: 13 }}>KES {orderDetail.subtotal?.toFixed(0)}</Text>
+                    </View>
+                    {(orderDetail.discount ?? 0) > 0 && (
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                        <Text style={{ color: D.muted, fontSize: 13 }}>Discount</Text>
+                        <Text style={{ color: '#e53935', fontSize: 13 }}>-KES {orderDetail.discount?.toFixed(0)}</Text>
+                      </View>
+                    )}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text style={{ color: D.muted, fontSize: 13 }}>VAT</Text>
+                      <Text style={{ color: D.text, fontSize: 13 }}>KES {orderDetail.tax_amount?.toFixed(0)}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, paddingTop: 8, borderTopWidth: 1, borderTopColor: D.border }}>
+                      <Text style={{ color: D.text, fontWeight: '800', fontSize: 15 }}>TOTAL</Text>
+                      <Text style={{ color: D.accent, fontWeight: '900', fontSize: 15 }}>KES {orderDetail.total?.toFixed(0)}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 }}>
+                      <Text style={{ color: D.muted, fontSize: 13 }}>Payment</Text>
+                      <Text style={{ color: D.text, fontWeight: '600', fontSize: 13 }}>{orderDetail.payment_method}</Text>
+                    </View>
+                    {orderDetail.mpesa_ref && (
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                        <Text style={{ color: D.muted, fontSize: 13 }}>Ref</Text>
+                        <Text style={{ color: D.text, fontSize: 13 }}>{orderDetail.mpesa_ref}</Text>
+                      </View>
+                    )}
+                  </View>
+                </>
+              ) : (
+                <ActivityIndicator style={{ marginTop: 20 }} color={D.accent} />
+              )}
+            </ScrollView>
+          </Dialog.Content>
+          <Dialog.Actions>
+            {orderDetailSale?.status === 'PAID' && user?.role === 'ADMIN' && (
+              <Button textColor="#f59e0b" onPress={() => setOrderReverseOpen(true)}>Reverse</Button>
+            )}
+            <Button
+              textColor={D.accent}
+              icon="printer"
+              onPress={async () => {
+                if (orderDetail) {
+                  setOrderDetailSale(null);
+                  await printReceipt(orderDetail);
+                }
+              }}
+            >
+              Reprint
+            </Button>
+            <Button textColor={D.muted} onPress={() => setOrderDetailSale(null)}>Close</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Order Reverse Dialog */}
+        <Dialog visible={orderReverseOpen} onDismiss={() => { setOrderReverseOpen(false); setOrderReverseReason(''); }} style={{ backgroundColor: D.surface }}>
+          <Dialog.Title style={{ color: D.text }}>Reverse — {orderDetailSale?.invoice_no}</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ color: D.muted, marginBottom: 12, fontSize: 13 }}>
+              This will create a negative record restoring stock and reversing the payment.
+            </Text>
+            <RNTextInput
+              placeholder="Reason for reversal *"
+              placeholderTextColor={D.muted}
+              value={orderReverseReason}
+              onChangeText={setOrderReverseReason}
+              style={[styles.darkInput, { color: D.text, borderColor: D.border, backgroundColor: D.elevated }]}
+              multiline
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button textColor={D.muted} onPress={() => { setOrderReverseOpen(false); setOrderReverseReason(''); }}>Cancel</Button>
+            <Button
+              mode="contained"
+              buttonColor="#f59e0b"
+              textColor="#fff"
+              loading={orderReverseMutation.isPending}
+              onPress={() => {
+                if (!orderReverseReason.trim()) { Alert.alert('Reason Required', 'Enter a reason for the reversal.'); return; }
+                orderReverseMutation.mutate({ saleId: orderDetailSale!.id, reason: orderReverseReason.trim() });
+              }}
+            >
+              Confirm Reversal
+            </Button>
           </Dialog.Actions>
         </Dialog>
 
