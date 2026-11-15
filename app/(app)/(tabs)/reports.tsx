@@ -105,12 +105,11 @@ export default function ReportsScreen() {
   const totalCOGS = cogsData ?? 0;
   const inputVAT = inputVATData ?? 0;
 
-  // Products where cost >= price excl VAT — these are sold at a loss after VAT
+  // Products where buying price >= selling price — sold at a loss.
+  // Both prices are VAT-inclusive; profit = (price - cost) / (1 + vat_rate/100).
   const productsAtRisk = (allProducts ?? []).filter((p) => {
     if (!p.cost || !p.price || p.cost <= 0 || p.price <= 0) return false;
-    const vatFactor = (p.vat_rate ?? 16) / 100;
-    const netPrice = p.price / (1 + vatFactor);
-    return p.cost >= netPrice;
+    return p.cost >= p.price;
   });
 
   // Stock valuation
@@ -343,10 +342,10 @@ export default function ReportsScreen() {
                 {grossProfit < 0 && totalCOGS > 0 && (
                   <View style={{ backgroundColor: '#fff3cd', borderRadius: 8, padding: 10, marginBottom: 8 }}>
                     <Text style={{ fontSize: 12, color: '#856404', fontWeight: '700', marginBottom: 4 }}>
-                      ⚠ Selling at a loss — check product pricing
+                      ⚠ Selling at a loss — buying price exceeds selling price
                     </Text>
                     <Text style={{ fontSize: 12, color: '#856404' }}>
-                      Selling prices are VAT-inclusive. For a product at KES 116 with 16% VAT, only KES 100 is your revenue — KES 16 goes to KRA. Your cost must be below the selling price EXCLUDING VAT (price ÷ 1.16). Check the "Pricing Check" card below.
+                      Both your buying and selling prices include VAT. Profit = (Selling − Buying) ÷ 1.16. As long as your selling price is higher than your buying price, you make a profit. Check the "Pricing Check" card below for affected products.
                     </Text>
                   </View>
                 )}
@@ -394,37 +393,32 @@ export default function ReportsScreen() {
               />
               <Card.Content>
                 <Text style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
-                  Selling prices are VAT-inclusive. Your cost must be below the selling price EXCLUDING VAT. For 16% VAT: net price = selling price ÷ 1.16
+                  Both buying and selling prices are VAT-inclusive. You reclaim input VAT on purchases. Profit per unit = (Sell − Buy) ÷ (1 + VAT rate). A product is at risk only when its buying price ≥ selling price.
                 </Text>
                 {productsAtRisk.length === 0 ? (
-                  <Text style={{ fontSize: 13, color: '#22c55e' }}>All product costs are within safe range.</Text>
+                  <Text style={{ fontSize: 13, color: '#22c55e' }}>All products are priced above their buying price. ✓</Text>
                 ) : (
                   productsAtRisk.map((p) => {
                     const vatFactor = (p.vat_rate ?? 16) / 100;
-                    const netPrice = p.price / (1 + vatFactor);
-                    const lossPerUnit = p.cost - netPrice;
+                    const lossPerUnit = (p.price - p.cost) / (1 + vatFactor); // negative
                     return (
                       <View key={p.id} style={{ marginBottom: 10, padding: 8, backgroundColor: '#fff5f5', borderRadius: 8, borderLeftWidth: 3, borderLeftColor: '#e53935' }}>
                         <Text style={{ fontWeight: '700', fontSize: 13, color: C.text }}>{p.name}</Text>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-                          <Text style={{ fontSize: 12, color: C.muted }}>Sell (incl. VAT)</Text>
-                          <Text style={{ fontSize: 12, color: C.text }}>KES {p.price.toLocaleString('en-KE', { maximumFractionDigits: 0 })}</Text>
-                        </View>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                          <Text style={{ fontSize: 12, color: C.muted }}>Net revenue (excl. VAT)</Text>
-                          <Text style={{ fontSize: 12, color: '#3b82f6' }}>KES {netPrice.toLocaleString('en-KE', { maximumFractionDigits: 0 })}</Text>
-                        </View>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                          <Text style={{ fontSize: 12, color: C.muted }}>Your cost</Text>
+                          <Text style={{ fontSize: 12, color: C.muted }}>Buying price (VAT-incl.)</Text>
                           <Text style={{ fontSize: 12, color: '#e53935' }}>KES {p.cost.toLocaleString('en-KE', { maximumFractionDigits: 0 })}</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                          <Text style={{ fontSize: 12, color: C.muted }}>Selling price (VAT-incl.)</Text>
+                          <Text style={{ fontSize: 12, color: C.text }}>KES {p.price.toLocaleString('en-KE', { maximumFractionDigits: 0 })}</Text>
                         </View>
                         <Divider style={{ marginVertical: 4 }} />
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                          <Text style={{ fontSize: 12, color: '#e53935', fontWeight: '700' }}>Loss per unit</Text>
-                          <Text style={{ fontSize: 12, color: '#e53935', fontWeight: '700' }}>-KES {lossPerUnit.toLocaleString('en-KE', { maximumFractionDigits: 0 })}</Text>
+                          <Text style={{ fontSize: 12, color: '#e53935', fontWeight: '700' }}>Loss per unit (after VAT)</Text>
+                          <Text style={{ fontSize: 12, color: '#e53935', fontWeight: '700' }}>KES {lossPerUnit.toLocaleString('en-KE', { maximumFractionDigits: 0 })}</Text>
                         </View>
                         <Text style={{ fontSize: 11, color: '#856404', marginTop: 4 }}>
-                          Min. break-even price (VAT-incl.): KES {(p.cost * (1 + vatFactor)).toLocaleString('en-KE', { maximumFractionDigits: 0 })}
+                          Min. selling price to break even: KES {(p.cost + 1).toLocaleString('en-KE', { maximumFractionDigits: 0 })} (must exceed buying price of KES {p.cost.toLocaleString('en-KE', { maximumFractionDigits: 0 })})
                         </Text>
                       </View>
                     );

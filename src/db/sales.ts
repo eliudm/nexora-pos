@@ -304,11 +304,14 @@ export const salesQueries = {
 
   getCOGS: async (from: string, to: string): Promise<number> => {
     const db = await getDb();
+    // Buying prices are VAT-inclusive just like selling prices.
+    // Divide cost by (1 + vat_rate/100) to get net cost excl. VAT,
+    // which is the actual expense after reclaiming input VAT from KRA.
     const row = await db.getFirstAsync<{ total_cogs: number }>(`
       SELECT COALESCE(SUM(
         CASE WHEN si.cost_price > 0
-             THEN si.cost_price * si.qty
-             ELSE COALESCE(p.cost, 0) * si.qty
+             THEN (si.cost_price / (1.0 + si.vat_rate / 100.0)) * si.qty
+             ELSE (COALESCE(p.cost, 0) / (1.0 + COALESCE(p.vat_rate, 16.0) / 100.0)) * si.qty
         END
       ), 0) as total_cogs
       FROM sale_items si
