@@ -122,8 +122,8 @@ export default function ReportsScreen() {
   const debtCustomers = (allCustomers ?? []).filter((c) => c.credit_balance < 0);
   const totalDebt = debtCustomers.reduce((s, c) => s + Math.abs(c.credit_balance), 0);
 
-  // Only count PAID sales in financial totals — matches the getCOGS filter
-  const paidSales = (sales ?? []).filter((x) => x.status === 'PAID');
+  // Include PAID + REVERSAL (negative totals) in financial totals — matches getCOGS filter
+  const paidSales = (sales ?? []).filter((x) => x.status === 'PAID' || x.status === 'REVERSAL');
   const totalRevenue = paidSales.reduce((s, x) => s + x.total, 0);
   const totalVAT = paidSales.reduce((s, x) => s + x.tax_amount, 0);
   const revenueExVAT = totalRevenue - totalVAT;

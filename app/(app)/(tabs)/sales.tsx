@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, FlatList, Alert } from 'react-native';
-import { Text, Appbar, Card, Chip, Portal, Dialog, Button, Divider, DataTable } from 'react-native-paper';
+import { Text, Appbar, Card, Chip, Portal, Dialog, Button, Divider, DataTable, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -22,6 +22,9 @@ export default function SalesScreen() {
   const [to, setTo] = useState(dayjs().format('YYYY-MM-DD'));
   const [selected, setSelected] = useState<Sale | null>(null);
 
+  const [reverseDialogOpen, setReverseDialogOpen] = useState(false);
+  const [reverseReason, setReverseReason] = useState('');
+
   const voidMutation = useMutation({
     mutationFn: (saleId: number) => salesQueries.voidSale(saleId, user?.id ?? null),
     onSuccess: () => {
@@ -31,6 +34,21 @@ export default function SalesScreen() {
       setSelected(null);
       Alert.alert('Voided', 'Sale has been voided and stock restored.');
     },
+  });
+
+  const reverseMutation = useMutation({
+    mutationFn: ({ saleId, reason }: { saleId: number; reason: string }) =>
+      salesQueries.reverseSale(saleId, reason, user?.id ?? null),
+    onSuccess: (reversalInvoiceNo) => {
+      qc.invalidateQueries({ queryKey: ['sales'] });
+      qc.invalidateQueries({ queryKey: ['daily-summary'] });
+      qc.invalidateQueries({ queryKey: ['products'] });
+      setReverseDialogOpen(false);
+      setReverseReason('');
+      setSelected(null);
+      Alert.alert('Reversed', `Reversal posted as ${reversalInvoiceNo}. Stock restored.`);
+    },
+    onError: (e: any) => Alert.alert('Error', e.message),
   });
 
   const handleVoid = (sale: Sale) => {
@@ -110,11 +128,19 @@ export default function SalesScreen() {
                 {item.customer_name && <Text style={styles.customer}>{item.customer_name}</Text>}
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.total, item.status === 'VOIDED' && { color: '#aaa', textDecorationLine: 'line-through' }]}>
-                  KES {item.total.toLocaleString()}
+                <Text style={[
+                  styles.total,
+                  (item.status === 'VOIDED' || item.status === 'REVERSED') && { color: '#aaa', textDecorationLine: 'line-through' },
+                  item.status === 'REVERSAL' && { color: '#e53935' },
+                ]}>
+                  {item.status === 'REVERSAL' ? '-' : ''}KES {Math.abs(item.total).toLocaleString()}
                 </Text>
                 {item.status === 'VOIDED' ? (
                   <Chip compact style={[styles.pmChip, { backgroundColor: '#fce4e4' }]} textStyle={[styles.pmText, { color: '#e53935' }]}>VOIDED</Chip>
+                ) : item.status === 'REVERSED' ? (
+                  <Chip compact style={[styles.pmChip, { backgroundColor: '#fff3cd' }]} textStyle={[styles.pmText, { color: '#856404' }]}>REVERSED</Chip>
+                ) : item.status === 'REVERSAL' ? (
+                  <Chip compact style={[styles.pmChip, { backgroundColor: '#fce4e4' }]} textStyle={[styles.pmText, { color: '#e53935' }]}>REVERSAL</Chip>
                 ) : (
                   <Chip compact style={[styles.pmChip, { backgroundColor: (PM_COLORS[item.payment_method] ?? '#888') + '22' }]} textStyle={[styles.pmText, { color: PM_COLORS[item.payment_method] ?? '#888' }]}>
                     {item.payment_method}
@@ -228,12 +254,48 @@ export default function SalesScreen() {
             </View>
           </Dialog.Content>
           <Dialog.Actions>
-            {selected?.status !== 'VOIDED' && user?.role === 'ADMIN' && (
+            {selected?.status === 'PAID' && user?.role === 'ADMIN' && (
+              <Button textColor="#f59e0b" onPress={() => setReverseDialogOpen(true)}>
+                Reverse
+              </Button>
+            )}
+            {selected?.status === 'PAID' && user?.role === 'ADMIN' && (
               <Button textColor="#e53935" onPress={() => handleVoid(selected!)} loading={voidMutation.isPending}>
-                Void Sale
+                Void
               </Button>
             )}
             <Button onPress={() => setSelected(null)}>Close</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Reversal reason dialog */}
+        <Dialog visible={reverseDialogOpen} onDismiss={() => { setReverseDialogOpen(false); setReverseReason(''); }}>
+          <Dialog.Title>Reverse Sale — {selected?.invoice_no}</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ fontSize: 13, color: C.muted, marginBottom: 12 }}>
+              A reversal creates a new negative transaction ({`REV-${selected?.invoice_no}`}) that cancels this sale in the books and restores stock. The original record is preserved for audit.
+            </Text>
+            <TextInput
+              label="Reason (e.g. Customer return, Error)"
+              value={reverseReason}
+              onChangeText={setReverseReason}
+              mode="outlined"
+              autoFocus
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => { setReverseDialogOpen(false); setReverseReason(''); }}>Cancel</Button>
+            <Button
+              mode="contained"
+              buttonColor="#f59e0b"
+              loading={reverseMutation.isPending}
+              onPress={() => {
+                if (!reverseReason.trim()) { Alert.alert('Reason Required', 'Enter a reason for the reversal.'); return; }
+                reverseMutation.mutate({ saleId: selected!.id, reason: reverseReason.trim() });
+              }}
+            >
+              Confirm Reversal
+            </Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>

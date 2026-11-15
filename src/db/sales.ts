@@ -202,6 +202,71 @@ export const salesQueries = {
     `, [from, to, limit]);
   },
 
+  reverseSale: async (saleId: number, reason: string, userId: number | null): Promise<string> => {
+    const db = await getDb();
+    const sale = await db.getFirstAsync<{
+      status: string; invoice_no: string; customer_id: number | null;
+      subtotal: number; tax_amount: number; discount: number; total: number; payment_method: string;
+    }>('SELECT status, invoice_no, customer_id, subtotal, tax_amount, discount, total, payment_method FROM sales WHERE id = ?', [saleId]);
+
+    if (!sale) throw new Error('Sale not found');
+    if (sale.status !== 'PAID') throw new Error('Only PAID sales can be reversed');
+
+    const items = await db.getAllAsync<CartItem>(
+      'SELECT * FROM sale_items WHERE sale_id = ?', [saleId],
+    );
+
+    const reversalInvoiceNo = `REV-${sale.invoice_no}`;
+    const reversalNote = `Reversal of ${sale.invoice_no}${reason ? ': ' + reason : ''}`;
+
+    // Create reversal sale with negative amounts
+    const result = await db.runAsync(
+      `INSERT INTO sales (invoice_no, customer_id, cashier_id, subtotal, tax_amount, discount, total, payment_method, status, note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'REVERSAL', ?)`,
+      [reversalInvoiceNo, sale.customer_id, userId,
+       -sale.subtotal, -sale.tax_amount, -sale.discount, -sale.total,
+       sale.payment_method, reversalNote],
+    );
+    const reversalSaleId = result.lastInsertRowId;
+
+    // Insert negative sale items and restore stock
+    for (const item of items) {
+      await db.runAsync(
+        `INSERT INTO sale_items (sale_id, product_id, product_name, qty, unit_price, cost_price, discount, vat_rate, vat_amount, total)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [reversalSaleId, item.product_id, item.product_name,
+         -item.qty, item.unit_price, item.cost_price,
+         -item.discount, item.vat_rate, -item.vat_amount, -item.total],
+      );
+      const prod = await db.getFirstAsync<{ stock_qty: number; track_stock: number }>(
+        'SELECT stock_qty, track_stock FROM products WHERE id = ?', [item.product_id],
+      );
+      if (prod?.track_stock) {
+        const newQty = (prod.stock_qty ?? 0) + item.qty;
+        await db.runAsync('UPDATE products SET stock_qty = ? WHERE id = ?', [newQty, item.product_id]);
+        await db.runAsync(
+          'INSERT INTO stock_log (product_id, product_name, change_qty, balance_after, reason, user_id) VALUES (?,?,?,?,?,?)',
+          [item.product_id, item.product_name, item.qty, newQty, `Reversal of ${sale.invoice_no}`, userId],
+        );
+      }
+    }
+
+    // Restore credit balance if applicable
+    if (sale.payment_method === 'CREDIT' && sale.customer_id) {
+      await db.runAsync(
+        'UPDATE customers SET credit_balance = credit_balance + ? WHERE id = ?',
+        [sale.total, sale.customer_id],
+      );
+    }
+
+    // Mark original as REVERSED
+    await db.runAsync(
+      "UPDATE sales SET status = 'REVERSED' WHERE id = ?", [saleId],
+    );
+
+    return reversalInvoiceNo;
+  },
+
   voidSale: async (saleId: number, userId: number | null): Promise<void> => {
     const db = await getDb();
     const sale = await db.getFirstAsync<{ status: string; customer_id: number | null; total: number; payment_method: string }>(
@@ -322,7 +387,7 @@ export const salesQueries = {
       FROM sale_items si
       JOIN sales s ON si.sale_id = s.id
       LEFT JOIN products p ON p.id = si.product_id
-      WHERE date(s.created_at) BETWEEN ? AND ? AND s.status = 'PAID'
+      WHERE date(s.created_at) BETWEEN ? AND ? AND s.status IN ('PAID', 'REVERSAL')
     `, [from, to]);
     return row?.total_cogs ?? 0;
   },
