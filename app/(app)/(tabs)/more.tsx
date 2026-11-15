@@ -59,6 +59,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
   {
     title: 'Finance',
     items: [
+      { label: 'Credit', description: 'Outstanding balances and repayments', icon: 'credit-card-clock-outline', route: '/credit', color: '#e53935' },
       { label: 'Expenses', description: 'Track business expenses', icon: 'cash-minus', route: '/expenses', color: '#e53935' },
     ],
   },

@@ -55,6 +55,7 @@ export default function AppLayout() {
         <Stack.Screen name="stocktake" />
         <Stack.Screen name="quotations" />
         <Stack.Screen name="layaway" />
+        <Stack.Screen name="credit" />
         <Stack.Screen name="help" />
         <Stack.Screen name="subscription" />
       </Stack>

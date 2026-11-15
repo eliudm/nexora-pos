@@ -343,12 +343,28 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   await safeAlter('ALTER TABLE sales ADD COLUMN loyalty_points_earned INTEGER DEFAULT 0');
   await safeAlter('ALTER TABLE sales ADD COLUMN loyalty_points_redeemed INTEGER DEFAULT 0');
   await safeAlter('ALTER TABLE customers ADD COLUMN loyalty_points INTEGER DEFAULT 0');
+  await safeAlter('ALTER TABLE customers ADD COLUMN credit_limit REAL DEFAULT 0');
   await safeAlter('ALTER TABLE products ADD COLUMN low_stock_threshold REAL DEFAULT 0');
   await safeAlter('ALTER TABLE products ADD COLUMN reorder_qty REAL DEFAULT 0');
   await safeAlter('ALTER TABLE products ADD COLUMN expiry_date TEXT');
   await safeAlter('ALTER TABLE sale_items ADD COLUMN cost_price REAL DEFAULT 0');
   await safeAlter('ALTER TABLE vendor_bills ADD COLUMN vat_rate REAL DEFAULT 16');
   await safeAlter('ALTER TABLE vendor_bills ADD COLUMN vat_amount REAL DEFAULT 0');
+
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS credit_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      sale_id INTEGER REFERENCES sales(id) ON DELETE SET NULL,
+      type TEXT NOT NULL DEFAULT 'REPAYMENT',
+      amount REAL NOT NULL,
+      payment_method TEXT DEFAULT 'CASH',
+      mpesa_ref TEXT,
+      note TEXT,
+      cashier_id INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT (datetime('now','localtime'))
+    );
+  `);
 
   // Seed default admin if none exists
   const userCount = await db.getFirstAsync<{ c: number }>('SELECT COUNT(*) as c FROM users');

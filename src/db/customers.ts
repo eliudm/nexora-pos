@@ -6,6 +6,7 @@ export interface Customer {
   phone: string | null;
   email: string | null;
   credit_balance: number;
+  credit_limit: number;
   loyalty_points: number;
   created_at: string;
 }
@@ -25,7 +26,7 @@ export const customerQueries = {
     return db.getFirstAsync<Customer>('SELECT * FROM customers WHERE id = ?', [id]);
   },
 
-  create: async (data: Omit<Customer, 'id' | 'created_at' | 'loyalty_points'> & { loyalty_points?: number }): Promise<number> => {
+  create: async (data: Omit<Customer, 'id' | 'created_at' | 'loyalty_points' | 'credit_limit'> & { loyalty_points?: number; credit_limit?: number }): Promise<number> => {
     const db = await getDb();
     const r = await db.runAsync(
       'INSERT INTO customers (name, phone, email, credit_balance) VALUES (?, ?, ?, ?)',

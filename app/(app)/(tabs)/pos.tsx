@@ -592,6 +592,22 @@ export default function POSScreen() {
       Alert.alert('Customer Required', 'Select a customer for credit sales.');
       return;
     }
+    if (payMethod === 'CREDIT' && selectedCustomer) {
+      const limit = selectedCustomer.credit_limit ?? 0;
+      if (limit > 0) {
+        const newBalance = selectedCustomer.credit_balance - total;
+        if (newBalance < -limit) {
+          const available = limit + selectedCustomer.credit_balance;
+          Alert.alert(
+            'Credit Limit Exceeded',
+            `${selectedCustomer.name} has a credit limit of KES ${limit.toLocaleString('en-KE')}.\n` +
+            `Available credit: KES ${Math.max(0, available).toLocaleString('en-KE')}.\n` +
+            `This sale of KES ${total.toFixed(2)} would exceed the limit.`,
+          );
+          return;
+        }
+      }
+    }
     if (pointsRedeemed > loyaltyBalance) {
       Alert.alert('Insufficient Points', `Customer only has ${loyaltyBalance} points.`);
       return;
