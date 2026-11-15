@@ -93,14 +93,24 @@ export default function ReportsScreen() {
     enabled: reportTab === 'reconcile',
   });
 
-  // Today's reconciliation data
-  const todaySales = (sales ?? []);
-  const expectedCash = todaySales.filter(s => s.payment_method === 'CASH').reduce((a, s) => a + s.total, 0)
-    + todaySales.filter(s => s.payment_method === 'SPLIT').reduce((a, s) => a + ((s as any).split_cash ?? 0), 0);
-  const expectedMpesa = todaySales.filter(s => s.payment_method === 'MPESA').reduce((a, s) => a + s.total, 0)
-    + todaySales.filter(s => s.payment_method === 'SPLIT').reduce((a, s) => a + ((s as any).split_mpesa ?? 0), 0);
-  const expectedCredit = todaySales.filter(s => s.payment_method === 'CREDIT').reduce((a, s) => a + s.total, 0);
-  const cashVariance = (parseFloat(actualCash) || 0) - ((openShift?.opening_cash ?? 0) + expectedCash);
+  // Reconcile always uses today regardless of the period selector
+  const reconToday = dayjs().format('YYYY-MM-DD');
+  const { data: reconSalesRaw } = useQuery({
+    queryKey: ['sales-reconcile', reconToday],
+    queryFn: () => salesQueries.getAll(reconToday, reconToday, 500),
+    enabled: reportTab === 'reconcile',
+  });
+
+  // Exclude VOIDED (REVERSED + REVERSAL pairs net to zero naturally)
+  const reconSales = (reconSalesRaw ?? []).filter(s => s.status !== 'VOIDED');
+  const expectedCash = reconSales.filter(s => s.payment_method === 'CASH').reduce((a, s) => a + s.total, 0)
+    + reconSales.filter(s => s.payment_method === 'SPLIT').reduce((a, s) => a + ((s as any).split_cash ?? 0), 0);
+  const expectedMpesa = reconSales.filter(s => s.payment_method === 'MPESA').reduce((a, s) => a + s.total, 0)
+    + reconSales.filter(s => s.payment_method === 'SPLIT').reduce((a, s) => a + ((s as any).split_mpesa ?? 0), 0);
+  const expectedCredit = reconSales.filter(s => s.payment_method === 'CREDIT').reduce((a, s) => a + s.total, 0);
+  // Expected drawer = opening float + cash sales + net petty cash movements
+  const expectedDrawer = (openShift?.opening_cash ?? 0) + expectedCash + (drawerBalance ?? 0);
+  const cashVariance = (parseFloat(actualCash) || 0) - expectedDrawer;
 
   const totalCOGS = cogsData ?? 0;
   const inputVAT = inputVATData ?? 0;
@@ -559,30 +569,37 @@ export default function ReportsScreen() {
                   <Text style={{ fontSize: 12, color: '#aaa', marginBottom: 8 }}>No open shift</Text>
                 )}
                 <Divider style={{ marginBottom: 12 }} />
-                <View style={styles.plRow}><Text style={styles.plLabel}>Expected Cash Sales</Text><Text style={styles.plVal}>{fmt(expectedCash)}</Text></View>
-                <View style={styles.plRow}><Text style={styles.plLabel}>Expected M-Pesa</Text><Text style={styles.plVal}>{fmt(expectedMpesa)}</Text></View>
+                <View style={styles.plRow}><Text style={styles.plLabel}>Opening Float</Text><Text style={styles.plVal}>{fmt(openShift?.opening_cash ?? 0)}</Text></View>
+                <View style={styles.plRow}><Text style={styles.plLabel}>Cash Sales</Text><Text style={styles.plVal}>{fmt(expectedCash)}</Text></View>
+                <View style={styles.plRow}><Text style={styles.plLabel}>Petty Cash In/Out</Text><Text style={[styles.plVal, { color: (drawerBalance ?? 0) >= 0 ? C.accent : '#e53935' }]}>{(drawerBalance ?? 0) >= 0 ? '+' : ''}{fmt(drawerBalance ?? 0)}</Text></View>
+                <View style={[styles.plRow, { borderTopWidth: 1, borderTopColor: '#eee', marginTop: 4, paddingTop: 8 }]}>
+                  <Text style={[styles.plLabel, { fontWeight: '700' }]}>Expected in Drawer</Text>
+                  <Text style={[styles.plVal, { color: C.accent, fontWeight: '700' }]}>{fmt(expectedDrawer)}</Text>
+                </View>
+                <View style={styles.plRow}><Text style={styles.plLabel}>M-Pesa Sales</Text><Text style={styles.plVal}>{fmt(expectedMpesa)}</Text></View>
                 <View style={styles.plRow}><Text style={styles.plLabel}>Credit Sales</Text><Text style={[styles.plVal, { color: '#f59e0b' }]}>{fmt(expectedCredit)}</Text></View>
-                <View style={styles.plRow}><Text style={styles.plLabel}>Drawer Balance</Text><Text style={[styles.plVal, { color: C.accent }]}>{fmt(drawerBalance ?? 0)}</Text></View>
                 <Divider style={{ marginVertical: 10 }} />
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6 }}>Actual Cash in Drawer</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: C.text, marginBottom: 6 }}>Count Actual Cash</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <Text style={{ fontSize: 13, color: '#555' }}>KES</Text>
+                  <Text style={{ fontSize: 13, color: C.muted }}>KES</Text>
                   <RNTextInput
                     value={actualCash}
                     onChangeText={setActualCash}
                     keyboardType="decimal-pad"
                     placeholder="0"
-                    style={{ flex: 1, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 16, color: '#111' }}
+                    style={{ flex: 1, borderWidth: 1, borderColor: C.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 16, color: C.text, backgroundColor: C.elevated }}
                   />
                 </View>
-                <View style={styles.plRow}>
-                  <Text style={styles.plLabel}>Over / Short</Text>
-                  <Text style={[styles.plVal, { color: cashVariance >= 0 ? '#22c55e' : '#e53935' }]}>
-                    {cashVariance >= 0 ? '+' : ''}{fmt(cashVariance)}
-                  </Text>
-                </View>
-                <Text style={{ fontSize: 11, color: '#aaa', marginTop: 8 }}>
-                  Enter actual drawer cash to see variance. Opening cash: {fmt(openShift?.opening_cash ?? 0)} + expected cash sales: {fmt(expectedCash)}.
+                {actualCash !== '' && (
+                  <View style={[styles.plRow, { marginTop: 10 }]}>
+                    <Text style={[styles.plLabel, { fontWeight: '700', fontSize: 14 }]}>Over / Short</Text>
+                    <Text style={[styles.plVal, { fontWeight: '900', fontSize: 15, color: cashVariance >= 0 ? '#22c55e' : '#e53935' }]}>
+                      {cashVariance >= 0 ? '+' : ''}{fmt(cashVariance)}
+                    </Text>
+                  </View>
+                )}
+                <Text style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>
+                  Expected = opening float ({fmt(openShift?.opening_cash ?? 0)}) + cash sales ({fmt(expectedCash)}) + petty movements ({fmt(drawerBalance ?? 0)})
                 </Text>
               </Card.Content>
             </Card>
