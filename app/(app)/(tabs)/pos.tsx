@@ -638,8 +638,8 @@ export default function POSScreen() {
                     <Text style={[styles.cartItemPrice, { color: D.muted }]}>@ KES {item.unit_price.toLocaleString()}{item.discount > 0 ? `  âˆ’${item.discount.toFixed(0)}` : ''}</Text>
                   </View>
                   <View style={styles.qtyRow}>
-                    <Pressable style={[styles.qtyBtn, { backgroundColor: D.elevated, borderColor: D.border }]} onPress={() => updateQty(item.product_id, item.qty - 1)}>
-                      <Text style={[styles.qtyBtnText, { color: D.text }]}>âˆ’</Text>
+                    <Pressable style={[styles.qtyBtn, { backgroundColor: D.elevated, borderColor: ‘#e53935’ }]} onPress={() => updateQty(item.product_id, item.qty - 1)}>
+                      <Text style={[styles.qtyBtnText, { color: ‘#e53935’ }]}>−</Text>
                     </Pressable>
                     <Pressable onPress={() => { setQtyDialogItem(item); setQtyInput(String(item.qty)); }}>
                       <Text style={[styles.qtyVal, { color: D.accent, textDecorationLine: 'underline' }]}>{item.qty}</Text>
