@@ -171,7 +171,7 @@ export default function DashboardScreen() {
               <MaterialCommunityIcons name="chevron-right" size={18} color={D.muted} />
             </View>
             {topProducts!.map((p, i) => (
-              <View key={p.product_name} style={[styles.productRow, { borderBottomColor: D.border }]}>
+              <View key={`${p.product_name}-${i}`} style={[styles.productRow, { borderBottomColor: D.border }]}>
                 <View style={[styles.rank, { backgroundColor: i === 0 ? D.accent : D.elevated }]}>
                   <Text style={[styles.rankText, { color: i === 0 ? '#fff' : D.muted }]}>{i + 1}</Text>
                 </View>

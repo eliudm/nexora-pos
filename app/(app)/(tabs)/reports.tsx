@@ -297,7 +297,7 @@ export default function ReportsScreen() {
             <Card.Title title="Top Products" titleStyle={styles.cardTitle} />
             <Card.Content>
               {topProducts!.map((p, i) => (
-                <View key={p.product_name} style={styles.productRow}>
+                <View key={`${p.product_name}-${i}`} style={styles.productRow}>
                   <View style={[styles.rank, { backgroundColor: i < 3 ? C.accent : C.elevated }]}>
                     <Text style={[styles.rankNum, { color: i < 3 ? '#fff' : '#666' }]}>{i + 1}</Text>
                   </View>
