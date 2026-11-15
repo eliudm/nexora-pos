@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, FlatList, Alert } from 'react-native';
+import { View, StyleSheet, FlatList, Alert, ScrollView, Pressable } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Text, Appbar, Card, Chip, Portal, Dialog, Button, Divider, DataTable, TextInput, RadioButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -211,100 +212,104 @@ export default function SalesScreen() {
       />
 
       <Portal>
-        <Dialog visible={!!selected} onDismiss={() => setSelected(null)}>
+        <Dialog visible={!!selected} onDismiss={() => setSelected(null)} style={{ maxHeight: '90%' }}>
           <Dialog.Title>Receipt — {selected?.invoice_no}</Dialog.Title>
-          <Dialog.Content>
-            <Text style={styles.receiptDate}>{dayjs(selected?.created_at).format('D MMM YYYY, HH:mm')}</Text>
-            {selected?.customer_name && <Text style={styles.receiptCustomer}>Customer: {selected.customer_name}</Text>}
+          <Dialog.ScrollArea style={{ paddingHorizontal: 0 }}>
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingVertical: 8 }}>
+              <Text style={styles.receiptDate}>{dayjs(selected?.created_at).format('D MMM YYYY, HH:mm')}</Text>
+              {selected?.customer_name && <Text style={styles.receiptCustomer}>Customer: {selected.customer_name}</Text>}
 
-            <Divider style={{ marginVertical: 10 }} />
-
-            <DataTable>
-              <DataTable.Header>
-                <DataTable.Title>Item</DataTable.Title>
-                <DataTable.Title numeric>Qty</DataTable.Title>
-                <DataTable.Title numeric>Total</DataTable.Title>
-                {hasCostData && <DataTable.Title numeric>Margin</DataTable.Title>}
-              </DataTable.Header>
-              {(detail?.items ?? []).map((item, i) => {
-                const vatF = item.vat_rate / 100;
-                const itemRevExVAT = item.total / (1 + vatF);
-                const itemCOGS = (item.cost_price / (1 + vatF)) * item.qty;
-                const itemProfit = itemRevExVAT - itemCOGS;
-                const itemPct = item.cost_price > 0 && itemRevExVAT > 0
-                  ? (itemProfit / itemRevExVAT) * 100 : null;
-                return (
-                  <DataTable.Row key={i}>
-                    <DataTable.Cell>{item.product_name}</DataTable.Cell>
-                    <DataTable.Cell numeric>{item.qty}</DataTable.Cell>
-                    <DataTable.Cell numeric>KES {item.total.toFixed(0)}</DataTable.Cell>
-                    {hasCostData && (
-                      <DataTable.Cell numeric>
-                        {itemPct !== null
-                          ? <Text style={{ fontSize: 12, color: itemPct >= 0 ? '#22c55e' : '#e53935', fontWeight: '700' }}>
-                              {itemPct >= 0 ? '+' : ''}{itemPct.toFixed(1)}%
-                            </Text>
-                          : <Text style={{ fontSize: 12, color: '#aaa' }}>—</Text>}
-                      </DataTable.Cell>
-                    )}
-                  </DataTable.Row>
-                );
-              })}
-            </DataTable>
-
-            <Divider style={{ marginVertical: 10 }} />
-
-            <View style={styles.receiptTotals}>
-              <View style={styles.rRow}><Text style={styles.rLabel}>Subtotal</Text><Text>KES {selected?.subtotal.toFixed(0)}</Text></View>
-              <View style={styles.rRow}><Text style={styles.rLabel}>VAT</Text><Text>KES {selected?.tax_amount.toFixed(0)}</Text></View>
-              {(selected?.discount ?? 0) > 0 && (
-                <View style={styles.rRow}><Text style={styles.rLabel}>Discount</Text><Text style={{ color: '#e53935' }}>-KES {selected?.discount}</Text></View>
+              {/* Record Payment button — inside scroll area so it's always visible */}
+              {selected?.status === 'PAID' && selected.payment_method === 'CREDIT' && selected.customer_id && (
+                <Pressable
+                  style={styles.recordPayBtn}
+                  onPress={() => setRepayDialogOpen(true)}
+                >
+                  <MaterialCommunityIcons name="cash-plus" size={16} color="#fff" />
+                  <Text style={styles.recordPayText}>Record Payment</Text>
+                </Pressable>
               )}
-              <View style={[styles.rRow, { marginTop: 4 }]}>
-                <Text style={styles.grandLabel}>TOTAL</Text>
-                <Text style={styles.grandVal}>KES {selected?.total.toFixed(0)}</Text>
-              </View>
-              <View style={styles.rRow}>
-                <Text style={styles.rLabel}>Payment</Text>
-                <Text style={{ fontWeight: '600', color: PM_COLORS[selected?.payment_method ?? ''] ?? '#333' }}>{selected?.payment_method}</Text>
-              </View>
-              {selected?.mpesa_ref && (
-                <View style={styles.rRow}><Text style={styles.rLabel}>Ref</Text><Text>{selected.mpesa_ref}</Text></View>
-              )}
-              {hasCostData && selected?.status === 'PAID' && (
-                <>
-                  <Divider style={{ marginVertical: 8 }} />
-                  <View style={styles.rRow}>
-                    <Text style={styles.rLabel}>Revenue (excl. VAT)</Text>
-                    <Text style={{ fontSize: 13, color: C.text }}>KES {detailRevExVAT.toFixed(0)}</Text>
-                  </View>
-                  <View style={styles.rRow}>
-                    <Text style={styles.rLabel}>Est. Cost (excl. VAT)</Text>
-                    <Text style={{ fontSize: 13, color: '#e53935' }}>-KES {detailCOGS.toFixed(0)}</Text>
-                  </View>
-                  <View style={[styles.rRow, { marginTop: 2 }]}>
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: C.text }}>Gross Profit</Text>
-                    <Text style={{ fontSize: 14, fontWeight: '800', color: detailProfit >= 0 ? '#22c55e' : '#e53935' }}>
-                      {detailProfit < 0 ? '-' : ''}KES {Math.abs(detailProfit).toFixed(0)}
-                      {'  '}<Text style={{ fontSize: 12, fontWeight: '600' }}>
-                        ({detailMarginPct >= 0 ? '+' : ''}{detailMarginPct.toFixed(1)}%)
+
+              <Divider style={{ marginVertical: 10 }} />
+
+              <DataTable>
+                <DataTable.Header>
+                  <DataTable.Title>Item</DataTable.Title>
+                  <DataTable.Title numeric>Qty</DataTable.Title>
+                  <DataTable.Title numeric>Total</DataTable.Title>
+                  {hasCostData && <DataTable.Title numeric>Margin</DataTable.Title>}
+                </DataTable.Header>
+                {(detail?.items ?? []).map((item, i) => {
+                  const vatF = item.vat_rate / 100;
+                  const itemRevExVAT = item.total / (1 + vatF);
+                  const itemCOGS = (item.cost_price / (1 + vatF)) * item.qty;
+                  const itemProfit = itemRevExVAT - itemCOGS;
+                  const itemPct = item.cost_price > 0 && itemRevExVAT > 0
+                    ? (itemProfit / itemRevExVAT) * 100 : null;
+                  return (
+                    <DataTable.Row key={i}>
+                      <DataTable.Cell>{item.product_name}</DataTable.Cell>
+                      <DataTable.Cell numeric>{item.qty}</DataTable.Cell>
+                      <DataTable.Cell numeric>KES {item.total.toFixed(0)}</DataTable.Cell>
+                      {hasCostData && (
+                        <DataTable.Cell numeric>
+                          {itemPct !== null
+                            ? <Text style={{ fontSize: 12, color: itemPct >= 0 ? '#22c55e' : '#e53935', fontWeight: '700' }}>
+                                {itemPct >= 0 ? '+' : ''}{itemPct.toFixed(1)}%
+                              </Text>
+                            : <Text style={{ fontSize: 12, color: '#aaa' }}>—</Text>}
+                        </DataTable.Cell>
+                      )}
+                    </DataTable.Row>
+                  );
+                })}
+              </DataTable>
+
+              <Divider style={{ marginVertical: 10 }} />
+
+              <View style={styles.receiptTotals}>
+                <View style={styles.rRow}><Text style={styles.rLabel}>Subtotal</Text><Text>KES {selected?.subtotal.toFixed(0)}</Text></View>
+                <View style={styles.rRow}><Text style={styles.rLabel}>VAT</Text><Text>KES {selected?.tax_amount.toFixed(0)}</Text></View>
+                {(selected?.discount ?? 0) > 0 && (
+                  <View style={styles.rRow}><Text style={styles.rLabel}>Discount</Text><Text style={{ color: '#e53935' }}>-KES {selected?.discount}</Text></View>
+                )}
+                <View style={[styles.rRow, { marginTop: 4 }]}>
+                  <Text style={styles.grandLabel}>TOTAL</Text>
+                  <Text style={styles.grandVal}>KES {selected?.total.toFixed(0)}</Text>
+                </View>
+                <View style={styles.rRow}>
+                  <Text style={styles.rLabel}>Payment</Text>
+                  <Text style={{ fontWeight: '600', color: PM_COLORS[selected?.payment_method ?? ''] ?? '#333' }}>{selected?.payment_method}</Text>
+                </View>
+                {selected?.mpesa_ref && (
+                  <View style={styles.rRow}><Text style={styles.rLabel}>Ref</Text><Text>{selected.mpesa_ref}</Text></View>
+                )}
+                {hasCostData && selected?.status === 'PAID' && (
+                  <>
+                    <Divider style={{ marginVertical: 8 }} />
+                    <View style={styles.rRow}>
+                      <Text style={styles.rLabel}>Revenue (excl. VAT)</Text>
+                      <Text style={{ fontSize: 13, color: C.text }}>KES {detailRevExVAT.toFixed(0)}</Text>
+                    </View>
+                    <View style={styles.rRow}>
+                      <Text style={styles.rLabel}>Est. Cost (excl. VAT)</Text>
+                      <Text style={{ fontSize: 13, color: '#e53935' }}>-KES {detailCOGS.toFixed(0)}</Text>
+                    </View>
+                    <View style={[styles.rRow, { marginTop: 2 }]}>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: C.text }}>Gross Profit</Text>
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: detailProfit >= 0 ? '#22c55e' : '#e53935' }}>
+                        {detailProfit < 0 ? '-' : ''}KES {Math.abs(detailProfit).toFixed(0)}
+                        {'  '}<Text style={{ fontSize: 12, fontWeight: '600' }}>
+                          ({detailMarginPct >= 0 ? '+' : ''}{detailMarginPct.toFixed(1)}%)
+                        </Text>
                       </Text>
-                    </Text>
-                  </View>
-                </>
-              )}
-            </View>
-          </Dialog.Content>
+                    </View>
+                  </>
+                )}
+              </View>
+            </ScrollView>
+          </Dialog.ScrollArea>
           <Dialog.Actions>
-            {selected?.status === 'PAID' && selected.payment_method === 'CREDIT' && selected.customer_id && (
-              <Button
-                textColor="#6f67ff"
-                icon="cash-plus"
-                onPress={() => setRepayDialogOpen(true)}
-              >
-                Record Payment
-              </Button>
-            )}
             {selected?.status === 'PAID' && user?.role === 'ADMIN' && (
               <Button textColor="#f59e0b" onPress={() => setReverseDialogOpen(true)}>
                 Reverse
@@ -438,6 +443,8 @@ function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
     badgeText: { fontSize: 10, fontWeight: '800', color: '#fff' },
     empty: { padding: 40, alignItems: 'center' },
     emptyText: { color: C.muted },
+    recordPayBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#6f67ff', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, marginTop: 10, alignSelf: 'flex-start' },
+    recordPayText: { color: '#fff', fontWeight: '700', fontSize: 14 },
     receiptDate: { fontSize: 13, color: C.muted, marginBottom: 2 },
     receiptCustomer: { fontSize: 13, color: C.text, marginBottom: 4 },
     receiptTotals: { marginTop: 4 },
