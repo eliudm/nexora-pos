@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, FlatList, Alert } from 'react-native';
-import { Text, Appbar, Card, Chip, Portal, Dialog, Button, Divider, DataTable, TextInput } from 'react-native-paper';
+import { Text, Appbar, Card, Chip, Portal, Dialog, Button, Divider, DataTable, TextInput, RadioButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { salesQueries, Sale } from '../../../src/db/sales';
+import { creditQueries } from '../../../src/db/credit';
 import { useSession } from '../../../src/context/session';
 import { useTheme } from '../../../src/context/theme';
+
+const REPAY_METHODS = ['CASH', 'MPESA', 'BANK'] as const;
+type RepayPM = typeof REPAY_METHODS[number];
 
 const PM_COLORS: Record<string, string> = {
   CASH: '#22c55e',
@@ -24,6 +28,13 @@ export default function SalesScreen() {
 
   const [reverseDialogOpen, setReverseDialogOpen] = useState(false);
   const [reverseReason, setReverseReason] = useState('');
+
+  // Credit repayment state
+  const [repayDialogOpen, setRepayDialogOpen] = useState(false);
+  const [repayAmount, setRepayAmount] = useState('');
+  const [repayMethod, setRepayMethod] = useState<RepayPM>('CASH');
+  const [repayMpesaRef, setRepayMpesaRef] = useState('');
+  const [repayNote, setRepayNote] = useState('');
 
   const voidMutation = useMutation({
     mutationFn: (saleId: number) => salesQueries.voidSale(saleId, user?.id ?? null),
@@ -50,6 +61,37 @@ export default function SalesScreen() {
     },
     onError: (e: any) => Alert.alert('Error', e.message),
   });
+
+  const repayMutation = useMutation({
+    mutationFn: () => creditQueries.recordRepayment({
+      customerId: selected!.customer_id!,
+      amount: parseFloat(repayAmount),
+      paymentMethod: repayMethod,
+      mpesaRef: repayMethod === 'MPESA' ? repayMpesaRef.trim() || undefined : undefined,
+      note: repayNote.trim() || `Payment for ${selected!.invoice_no}`,
+      cashierId: user?.id,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['credit-debtors'] });
+      qc.invalidateQueries({ queryKey: ['credit-summary'] });
+      qc.invalidateQueries({ queryKey: ['credit-ledger', selected!.customer_id] });
+      qc.invalidateQueries({ queryKey: ['customers'] });
+      setRepayDialogOpen(false);
+      setRepayAmount('');
+      setRepayMethod('CASH');
+      setRepayMpesaRef('');
+      setRepayNote('');
+      Alert.alert('Payment Recorded', `KES ${parseFloat(repayAmount).toLocaleString('en-KE', { minimumFractionDigits: 2 })} credited to account.`);
+    },
+    onError: (e: any) => Alert.alert('Error', e.message ?? 'Failed to record payment'),
+  });
+
+  const handleRepaySubmit = () => {
+    const amount = parseFloat(repayAmount);
+    if (!amount || amount <= 0) { Alert.alert('Invalid Amount', 'Enter a valid payment amount.'); return; }
+    if (repayMethod === 'MPESA' && !repayMpesaRef.trim()) { Alert.alert('M-Pesa Reference', 'Enter the M-Pesa transaction code.'); return; }
+    repayMutation.mutate();
+  };
 
   const handleVoid = (sale: Sale) => {
     if (user?.role !== 'ADMIN') { Alert.alert('Access Denied', 'Only admins can void sales.'); return; }
@@ -254,6 +296,15 @@ export default function SalesScreen() {
             </View>
           </Dialog.Content>
           <Dialog.Actions>
+            {selected?.status === 'PAID' && selected.payment_method === 'CREDIT' && selected.customer_id && (
+              <Button
+                textColor="#6f67ff"
+                icon="cash-plus"
+                onPress={() => setRepayDialogOpen(true)}
+              >
+                Record Payment
+              </Button>
+            )}
             {selected?.status === 'PAID' && user?.role === 'ADMIN' && (
               <Button textColor="#f59e0b" onPress={() => setReverseDialogOpen(true)}>
                 Reverse
@@ -265,6 +316,67 @@ export default function SalesScreen() {
               </Button>
             )}
             <Button onPress={() => setSelected(null)}>Close</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Credit repayment dialog */}
+        <Dialog visible={repayDialogOpen} onDismiss={() => setRepayDialogOpen(false)} style={{ backgroundColor: C.surface }}>
+          <Dialog.Title style={{ color: C.text }}>Record Payment</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ color: C.muted, marginBottom: 12 }}>
+              Paying against invoice {selected?.invoice_no} for {selected?.customer_name}
+            </Text>
+            <TextInput
+              label="Amount (KES)"
+              value={repayAmount}
+              onChangeText={setRepayAmount}
+              keyboardType="numeric"
+              mode="outlined"
+              style={{ marginBottom: 10 }}
+            />
+            <Text style={{ color: C.muted, fontSize: 12, marginBottom: 6 }}>Payment Method</Text>
+            <RadioButton.Group value={repayMethod} onValueChange={v => setRepayMethod(v as RepayPM)}>
+              <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                {REPAY_METHODS.map(m => (
+                  <Chip
+                    key={m}
+                    selected={repayMethod === m}
+                    onPress={() => setRepayMethod(m)}
+                    style={repayMethod === m ? { backgroundColor: '#6f67ff22' } : {}}
+                    textStyle={repayMethod === m ? { color: '#6f67ff' } : {}}
+                  >
+                    {m}
+                  </Chip>
+                ))}
+              </View>
+            </RadioButton.Group>
+            {repayMethod === 'MPESA' && (
+              <TextInput
+                label="M-Pesa Reference"
+                value={repayMpesaRef}
+                onChangeText={setRepayMpesaRef}
+                mode="outlined"
+                autoCapitalize="characters"
+                style={{ marginBottom: 10 }}
+              />
+            )}
+            <TextInput
+              label="Note (optional)"
+              value={repayNote}
+              onChangeText={setRepayNote}
+              mode="outlined"
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setRepayDialogOpen(false)} textColor={C.muted}>Cancel</Button>
+            <Button
+              onPress={handleRepaySubmit}
+              loading={repayMutation.isPending}
+              disabled={repayMutation.isPending}
+              textColor="#6f67ff"
+            >
+              Save Payment
+            </Button>
           </Dialog.Actions>
         </Dialog>
 

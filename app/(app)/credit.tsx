@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, FlatList, Alert, ScrollView } from 'react-native';
-import { Text, Button, Appbar, Portal, Dialog, TextInput, Chip, ActivityIndicator, RadioButton } from 'react-native-paper';
+import { View, StyleSheet, FlatList, Alert, ScrollView, Pressable } from 'react-native';
+import { Text, Button, Appbar, Portal, Dialog, TextInput, Chip, ActivityIndicator, RadioButton, Divider, DataTable } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import dayjs from 'dayjs';
 import { creditQueries, Debtor, CreditLedgerEntry } from '../../src/db/credit';
+import { salesQueries, Sale } from '../../src/db/sales';
 import { useSession } from '../../src/context/session';
 import { useTheme } from '../../src/context/theme';
 
@@ -34,6 +35,9 @@ export default function CreditScreen() {
   const [repayNote, setRepayNote] = useState('');
   const [limitInput, setLimitInput] = useState('');
 
+  const [invoiceVisible, setInvoiceVisible] = useState(false);
+  const [selectedInvoiceNo, setSelectedInvoiceNo] = useState<string | null>(null);
+
   const { data: summary } = useQuery({
     queryKey: ['credit-summary'],
     queryFn: creditQueries.getSummary,
@@ -53,6 +57,12 @@ export default function CreditScreen() {
     queryKey: ['credit-ledger', selectedDebtor?.id],
     queryFn: () => (selectedDebtor ? creditQueries.getLedger(selectedDebtor.id) : Promise.resolve([])),
     enabled: !!selectedDebtor && detailVisible,
+  });
+
+  const { data: invoiceDetail } = useQuery({
+    queryKey: ['sale-by-invoice', selectedInvoiceNo],
+    queryFn: () => salesQueries.getByInvoiceNo(selectedInvoiceNo!),
+    enabled: !!selectedInvoiceNo && invoiceVisible,
   });
 
   const repayMutation = useMutation({
@@ -320,7 +330,13 @@ export default function CreditScreen() {
               data={ledger}
               keyExtractor={(_, i) => String(i)}
               style={{ maxHeight: 240, paddingHorizontal: 16 }}
-              renderItem={({ item }) => <LedgerRow item={item} C={C} />}
+              renderItem={({ item }) => (
+              <LedgerRow
+                item={item}
+                C={C}
+                onInvoicePress={(inv) => { setSelectedInvoiceNo(inv); setInvoiceVisible(true); }}
+              />
+            )}
               ListEmptyComponent={
                 <Text style={{ color: C.muted, textAlign: 'center', paddingVertical: 16 }}>No transactions found</Text>
               }
@@ -422,12 +438,120 @@ export default function CreditScreen() {
             </Button>
           </Dialog.Actions>
         </Dialog>
+
+        {/* Invoice Detail Dialog */}
+        <Dialog
+          visible={invoiceVisible}
+          onDismiss={() => { setInvoiceVisible(false); setSelectedInvoiceNo(null); }}
+          style={{ maxHeight: '85%', backgroundColor: C.surface }}
+        >
+          <Dialog.Title style={{ color: C.text }}>
+            {invoiceDetail?.invoice_no ?? selectedInvoiceNo}
+          </Dialog.Title>
+          <Dialog.ScrollArea style={{ paddingHorizontal: 0 }}>
+            <ScrollView contentContainerStyle={{ padding: 20 }}>
+              {!invoiceDetail ? (
+                <ActivityIndicator style={{ marginVertical: 32 }} />
+              ) : (
+                <>
+                  <Text style={{ color: C.muted, fontSize: 13, marginBottom: 2 }}>
+                    {dayjs(invoiceDetail.created_at).format('D MMM YYYY, HH:mm')}
+                  </Text>
+                  {invoiceDetail.customer_name && (
+                    <Text style={{ color: C.text, fontSize: 13, marginBottom: 10 }}>
+                      Customer: {invoiceDetail.customer_name}
+                    </Text>
+                  )}
+
+                  <Divider style={{ marginBottom: 10 }} />
+
+                  <DataTable>
+                    <DataTable.Header>
+                      <DataTable.Title>Item</DataTable.Title>
+                      <DataTable.Title numeric>Qty</DataTable.Title>
+                      <DataTable.Title numeric>Total</DataTable.Title>
+                    </DataTable.Header>
+                    {(invoiceDetail.items ?? []).map((item, i) => (
+                      <DataTable.Row key={i}>
+                        <DataTable.Cell>{item.product_name}</DataTable.Cell>
+                        <DataTable.Cell numeric>{item.qty}</DataTable.Cell>
+                        <DataTable.Cell numeric>KES {item.total.toFixed(0)}</DataTable.Cell>
+                      </DataTable.Row>
+                    ))}
+                  </DataTable>
+
+                  <Divider style={{ marginVertical: 10 }} />
+
+                  <View style={{ gap: 4 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text style={{ color: C.muted, fontSize: 13 }}>Subtotal</Text>
+                      <Text style={{ color: C.text }}>KES {invoiceDetail.subtotal.toFixed(0)}</Text>
+                    </View>
+                    {invoiceDetail.tax_amount > 0 && (
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                        <Text style={{ color: C.muted, fontSize: 13 }}>VAT</Text>
+                        <Text style={{ color: C.text }}>KES {invoiceDetail.tax_amount.toFixed(0)}</Text>
+                      </View>
+                    )}
+                    {(invoiceDetail.discount ?? 0) > 0 && (
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                        <Text style={{ color: C.muted, fontSize: 13 }}>Discount</Text>
+                        <Text style={{ color: '#e53935' }}>-KES {invoiceDetail.discount}</Text>
+                      </View>
+                    )}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                      <Text style={{ fontSize: 15, fontWeight: '800', color: C.text }}>TOTAL</Text>
+                      <Text style={{ fontSize: 15, fontWeight: '800', color: '#e53935' }}>
+                        KES {invoiceDetail.total.toFixed(2)}
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text style={{ color: C.muted, fontSize: 13 }}>Payment</Text>
+                      <Text style={{ fontWeight: '600', color: '#6f67ff' }}>CREDIT</Text>
+                    </View>
+                  </View>
+                </>
+              )}
+            </ScrollView>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
+            {invoiceDetail?.customer_id && (
+              <Button
+                textColor={C.accent}
+                icon="cash-plus"
+                onPress={() => {
+                  setInvoiceVisible(false);
+                  setRepayVisible(true);
+                  // pre-select the debtor if not already
+                  if (!selectedDebtor) {
+                    setSelectedDebtor({
+                      id: invoiceDetail.customer_id!,
+                      name: invoiceDetail.customer_name ?? '',
+                      phone: null,
+                      credit_balance: 0,
+                      credit_limit: 0,
+                      oldest_sale_date: null,
+                    });
+                  }
+                }}
+              >
+                Record Payment
+              </Button>
+            )}
+            <Button
+              onPress={() => { setInvoiceVisible(false); setSelectedInvoiceNo(null); }}
+              textColor={C.muted}
+            >
+              Close
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
     </SafeAreaView>
   );
 }
 
-function LedgerRow({ item, C }: { item: CreditLedgerEntry; C: any }) {
+function LedgerRow({ item, C, onInvoicePress }: { item: CreditLedgerEntry; C: any; onInvoicePress?: (invoiceNo: string) => void }) {
   const isSale = item.type === 'SALE';
   const isRepayment = item.type === 'REPAYMENT';
   const color = isSale ? '#e53935' : '#22c55e';
@@ -435,14 +559,18 @@ function LedgerRow({ item, C }: { item: CreditLedgerEntry; C: any }) {
     ? 'cart-outline'
     : isRepayment ? 'cash-check' : 'pencil-outline';
   const sign = isSale ? '-' : '+';
+  const tappable = isSale && !!item.invoice_no;
 
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 0.5, borderBottomColor: '#00000015' }}>
+  const content = (
+    <>
       <MaterialCommunityIcons name={icon} size={18} color={color} />
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 13, color: C.text, fontWeight: '600' }}>
-          {item.invoice_no ?? item.note ?? (isRepayment ? 'Payment' : item.type)}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Text style={{ fontSize: 13, color: C.text, fontWeight: '600' }}>
+            {item.invoice_no ?? item.note ?? (isRepayment ? 'Payment' : item.type)}
+          </Text>
+          {tappable && <MaterialCommunityIcons name="chevron-right" size={14} color={C.muted} />}
+        </View>
         <Text style={{ fontSize: 11, color: C.muted }}>
           {dayjs(item.date).format('DD MMM YYYY, HH:mm')}
           {item.mpesa_ref ? ` · ${item.mpesa_ref}` : ''}
@@ -451,6 +579,23 @@ function LedgerRow({ item, C }: { item: CreditLedgerEntry; C: any }) {
       <Text style={{ fontWeight: '700', color, fontSize: 14 }}>
         {sign}KES {Math.abs(item.amount).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
       </Text>
+    </>
+  );
+
+  if (tappable) {
+    return (
+      <Pressable
+        onPress={() => onInvoicePress?.(item.invoice_no!)}
+        style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 0.5, borderBottomColor: '#00000015', opacity: pressed ? 0.6 : 1 })}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 0.5, borderBottomColor: '#00000015' }}>
+      {content}
     </View>
   );
 }

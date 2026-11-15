@@ -161,6 +161,22 @@ export const salesQueries = {
     `, [...params, limit]);
   },
 
+  getByInvoiceNo: async (invoiceNo: string): Promise<Sale | null> => {
+    const db = await getDb();
+    const sale = await db.getFirstAsync<Sale>(`
+      SELECT s.*, c.name as customer_name, u.name as cashier_name
+      FROM sales s
+      LEFT JOIN customers c ON s.customer_id = c.id
+      LEFT JOIN users u ON s.cashier_id = u.id
+      WHERE s.invoice_no = ?
+    `, [invoiceNo]);
+    if (!sale) return null;
+    sale.items = await db.getAllAsync<CartItem>(
+      'SELECT * FROM sale_items WHERE sale_id = ?', [sale.id],
+    );
+    return sale;
+  },
+
   getById: async (id: number): Promise<Sale | null> => {
     const db = await getDb();
     const sale = await db.getFirstAsync<Sale>(`
