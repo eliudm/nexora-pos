@@ -9,6 +9,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { salesQueries } from '../../../src/db/sales';
 import { getBusinessInfo } from '../../../src/db/settings';
 import { productQueries } from '../../../src/db/products';
+import { creditQueries } from '../../../src/db/credit';
 import { useTheme } from '../../../src/context/theme';
 
 export default function DashboardScreen() {
@@ -36,6 +37,11 @@ export default function DashboardScreen() {
     queryFn: getBusinessInfo,
   });
 
+  const { data: creditSummary } = useQuery({
+    queryKey: ['credit-summary'],
+    queryFn: creditQueries.getSummary,
+  });
+
   const { data: outOfStock = [] } = useQuery({ queryKey: ['alerts-oos'], queryFn: productQueries.getOutOfStock });
   const { data: lowStock = [] } = useQuery({ queryKey: ['alerts-low'], queryFn: productQueries.getLowStock });
   const { data: expiring = [] } = useQuery({ queryKey: ['alerts-expiry'], queryFn: () => productQueries.getExpiring(30) });
@@ -49,6 +55,7 @@ export default function DashboardScreen() {
     { label: "Today's Revenue", value: fmt(summary?.total_revenue ?? 0),     icon: 'cash-multiple', color: D.accent2,  route: '/(app)/reports' },
     { label: 'Cash',            value: fmt(summary?.cash_total ?? 0),        icon: 'cash',          color: D.success,  route: '/(app)/sales'   },
     { label: 'M-Pesa',          value: fmt(summary?.mpesa_total ?? 0),       icon: 'cellphone',     color: D.warning,  route: '/(app)/sales'   },
+    { label: 'Credit Sales',    value: fmt(summary?.credit_total ?? 0),      icon: 'credit-card-clock-outline', color: '#6f67ff', route: '/(app)/credit' },
   ];
 
   const quickLinks = [
@@ -56,6 +63,7 @@ export default function DashboardScreen() {
     { label: 'Products',    icon: 'package-variant',    color: D.accent2, route: '/(app)/products'       },
     { label: 'Customers',   icon: 'account-group',      color: D.success, route: '/(app)/customers'      },
     { label: 'Suppliers',   icon: 'truck-delivery',     color: D.warning, route: '/(app)/suppliers'      },
+    { label: 'Credit',      icon: 'credit-card-clock-outline', color: '#6f67ff', route: '/(app)/credit' },
     { label: 'Expenses',    icon: 'receipt',            color: D.danger,  route: '/(app)/expenses'       },
     { label: 'Stocktake',   icon: 'clipboard-list',     color: '#a78bfa', route: '/(app)/stocktake'      },
     { label: 'Reports',     icon: 'chart-bar',          color: D.accent,  route: '/(app)/reports'        },
@@ -137,6 +145,27 @@ export default function DashboardScreen() {
           </View>
           <MaterialCommunityIcons name="chevron-right" size={18} color={D.muted} />
         </Pressable>
+
+        {/* Outstanding Credit */}
+        {(creditSummary?.debtorCount ?? 0) > 0 && (
+          <Pressable
+            style={[styles.creditCard, { backgroundColor: '#6f67ff12', borderColor: '#6f67ff33' }]}
+            onPress={() => router.push('/(app)/credit' as any)}
+          >
+            <View style={[styles.alertIconWrap, { backgroundColor: '#6f67ff22' }]}>
+              <MaterialCommunityIcons name="credit-card-clock-outline" size={20} color="#6f67ff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.alertTitle, { color: '#6f67ff' }]}>
+                KES {(creditSummary?.totalOwed ?? 0).toLocaleString('en-KE', { maximumFractionDigits: 0 })} outstanding
+              </Text>
+              <Text style={[styles.alertSub, { color: D.muted }]}>
+                {creditSummary?.debtorCount} debtor{(creditSummary?.debtorCount ?? 0) !== 1 ? 's' : ''} · tap to manage
+              </Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={18} color={D.muted} />
+          </Pressable>
+        )}
 
         {/* Quick Links */}
         <Text style={[styles.sectionTitle, { color: D.muted }]}>Quick Actions</Text>
@@ -220,6 +249,7 @@ const styles = StyleSheet.create({
   posBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
   posBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   alertCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 12, marginBottom: 16, borderRadius: 14, padding: 14, borderWidth: 1, gap: 12 },
+  creditCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 12, marginBottom: 16, borderRadius: 14, padding: 14, borderWidth: 1, gap: 12 },
   alertIconWrap: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   alertTitle: { fontSize: 14, fontWeight: '800' },
   alertSub: { fontSize: 12, marginTop: 2 },
