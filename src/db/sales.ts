@@ -305,9 +305,15 @@ export const salesQueries = {
   getCOGS: async (from: string, to: string): Promise<number> => {
     const db = await getDb();
     const row = await db.getFirstAsync<{ total_cogs: number }>(`
-      SELECT COALESCE(SUM(si.cost_price * si.qty), 0) as total_cogs
+      SELECT COALESCE(SUM(
+        CASE WHEN si.cost_price > 0
+             THEN si.cost_price * si.qty
+             ELSE COALESCE(p.cost, 0) * si.qty
+        END
+      ), 0) as total_cogs
       FROM sale_items si
       JOIN sales s ON si.sale_id = s.id
+      LEFT JOIN products p ON p.id = si.product_id
       WHERE date(s.created_at) BETWEEN ? AND ? AND s.status = 'PAID'
     `, [from, to]);
     return row?.total_cogs ?? 0;
