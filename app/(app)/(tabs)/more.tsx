@@ -25,7 +25,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
   {
     title: 'Intelligence',
     items: [
-      { label: 'AI Insights', description: 'AI-powered sales & inventory analysis', icon: 'brain', route: '/ai-insights', color: '#6f67ff' },
+      { label: 'Smart Insights', description: 'On-device business intelligence, instant & free', icon: 'brain', route: '/ai-insights', color: '#6f67ff' },
     ],
   },
   {

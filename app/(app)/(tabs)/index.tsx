@@ -60,7 +60,7 @@ export default function DashboardScreen() {
     { label: 'Stocktake',   icon: 'clipboard-list',     color: '#a78bfa', route: '/(app)/stocktake'      },
     { label: 'Reports',     icon: 'chart-bar',          color: D.accent,  route: '/(app)/reports'        },
     { label: 'Analytics',   icon: 'chart-line',         color: D.accent2, route: '/(app)/analytics'      },
-    { label: 'AI Insights', icon: 'brain',              color: '#6f67ff', route: '/(app)/ai-insights'    },
+    { label: 'Insights',    icon: 'brain',              color: '#6f67ff', route: '/(app)/ai-insights'    },
   ];
 
   const trendMax = Math.max(...(trend ?? []).map((x) => x.revenue), 1);
