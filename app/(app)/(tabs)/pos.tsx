@@ -237,8 +237,19 @@ export default function POSScreen() {
   const addToCart = useCallback((product: Product) => {
     setCart((prev) => {
       const existing = prev.find((i) => i.product_id === product.id);
+      const newQty = (existing?.qty ?? 0) + 1;
+      if (product.track_stock === 1 && newQty > (product.stock_qty ?? 0)) {
+        const avail = product.stock_qty ?? 0;
+        Alert.alert(
+          avail <= 0 ? 'Out of Stock' : 'Not Enough Stock',
+          avail <= 0
+            ? `${product.name} is out of stock.`
+            : `Only ${avail} unit${avail !== 1 ? 's' : ''} of ${product.name} available.`,
+        );
+        return prev;
+      }
       if (existing) {
-        const qty = existing.qty + 1;
+        const qty = newQty;
         const rate = existing.vat_rate / 100;
         const vatAmt = existing.unit_price * qty * rate / (1 + rate);
         return prev.map((i) =>
@@ -253,6 +264,7 @@ export default function POSScreen() {
         product_id: product.id, product_name: product.name, qty: 1,
         unit_price: product.price, cost_price: product.cost, discount: 0, vat_rate: product.vat_rate,
         vat_amount: vatAmt, total: product.price,
+        track_stock: product.track_stock, stock_qty: product.stock_qty,
       }];
     });
   }, []);
@@ -263,9 +275,13 @@ export default function POSScreen() {
     if (qty <= 0) { removeFromCart(productId); return; }
     setCart((prev) => prev.map((i) => {
       if (i.product_id !== productId) return i;
+      const capped = (i.track_stock === 1 && i.stock_qty != null) ? Math.min(qty, i.stock_qty) : qty;
+      if (capped < qty) {
+        Alert.alert('Not Enough Stock', `Only ${i.stock_qty} unit${i.stock_qty !== 1 ? 's' : ''} of ${i.product_name} available.`);
+      }
       const rate = i.vat_rate / 100;
-      const vatAmt = i.unit_price * qty * rate / (1 + rate);
-      return { ...i, qty, vat_amount: vatAmt, total: i.unit_price * qty - i.discount };
+      const vatAmt = i.unit_price * capped * rate / (1 + rate);
+      return { ...i, qty: capped, vat_amount: vatAmt, total: i.unit_price * capped - i.discount };
     }));
   };
 
@@ -741,9 +757,18 @@ export default function POSScreen() {
                     <Pressable onPress={() => { setQtyDialogItem(item); setQtyInput(String(item.qty)); }}>
                       <Text style={[styles.qtyVal, { color: D.accent, textDecorationLine: 'underline' }]}>{item.qty}</Text>
                     </Pressable>
-                    <Pressable style={[styles.qtyBtn, { backgroundColor: D.accent }]} onPress={() => updateQty(item.product_id, item.qty + 1)}>
-                      <Text style={[styles.qtyBtnText, { color: '#fff' }]}>+</Text>
-                    </Pressable>
+                    {(() => {
+                      const atMax = item.track_stock === 1 && item.stock_qty != null && item.qty >= item.stock_qty;
+                      return (
+                        <Pressable
+                          style={[styles.qtyBtn, { backgroundColor: atMax ? D.elevated : D.accent }]}
+                          onPress={() => updateQty(item.product_id, item.qty + 1)}
+                          disabled={atMax}
+                        >
+                          <Text style={[styles.qtyBtnText, { color: atMax ? D.muted : '#fff' }]}>+</Text>
+                        </Pressable>
+                      );
+                    })()}
                   </View>
                   <Pressable onPress={() => { setItemDiscountItem(item); setItemDiscountInput(String(item.discount || '')); }}>
                     <Text style={[styles.cartItemTotal, { color: D.text }]}>KES {item.total.toFixed(0)}</Text>
@@ -1207,6 +1232,11 @@ export default function POSScreen() {
           <Dialog.Title style={{ color: D.text }}>Set Quantity</Dialog.Title>
           <Dialog.Content>
             <Text style={{ marginBottom: 8, color: D.muted }}>{qtyDialogItem?.product_name}</Text>
+            {qtyDialogItem?.track_stock === 1 && qtyDialogItem?.stock_qty != null && (
+              <Text style={{ marginBottom: 8, color: D.warning, fontSize: 12 }}>
+                {qtyDialogItem.stock_qty} in stock
+              </Text>
+            )}
             <RNTextInput
               value={qtyInput}
               onChangeText={setQtyInput}

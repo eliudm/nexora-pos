@@ -11,6 +11,8 @@ export interface CartItem {
   vat_rate: number;
   vat_amount: number;
   total: number;
+  track_stock?: number;
+  stock_qty?: number;
 }
 
 export interface SplitPayment {
