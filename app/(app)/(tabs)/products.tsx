@@ -288,7 +288,7 @@ export default function ProductsScreen() {
         keyExtractor={(p) => String(p.id)}
         contentContainerStyle={styles.list}
         renderItem={({ item }) => (
-          <Card style={styles.productCard}>
+          <Card style={styles.productCard} onPress={() => openEdit(item)}>
             <Card.Content style={styles.productContent}>
               {item.image_uri ? (
                 <Image source={{ uri: item.image_uri }} style={styles.productImage} />
