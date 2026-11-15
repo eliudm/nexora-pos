@@ -27,11 +27,15 @@ export default function ProductsScreen() {
   const { user } = useSession();
   const { colors: C } = useTheme();
   const [search, setSearch] = useState('');
+  const [filterCategoryId, setFilterCategoryId] = useState<number | null>(null);
   const [dialog, setDialog] = useState<DialogMode>(null);
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState({ ...EMPTY_PRODUCT });
   const [catName, setCatName] = useState('');
   const [catColor, setCatColor] = useState(C.accent);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [catEditName, setCatEditName] = useState('');
+  const [catEditColor, setCatEditColor] = useState(C.accent);
   const [menuId, setMenuId] = useState<number | null>(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [lastScan, setLastScan] = useState('');
@@ -48,6 +52,10 @@ export default function ProductsScreen() {
 
   const { data: products } = useQuery({ queryKey: ['products', search], queryFn: () => productQueries.getAll(search) });
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: productQueries.getCategories });
+
+  const filteredProducts = filterCategoryId
+    ? (products ?? []).filter((p) => p.category_id === filterCategoryId)
+    : (products ?? []);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -95,7 +103,25 @@ export default function ProductsScreen() {
 
   const catMutation = useMutation({
     mutationFn: () => productQueries.createCategory(catName.trim(), catColor),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['categories'] }); closeDialog(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['categories'] }); setCatName(''); setCatColor(C.accent); },
+  });
+
+  const updateCatMutation = useMutation({
+    mutationFn: () => productQueries.updateCategory(editingCategory!.id, catEditName.trim(), catEditColor),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['categories'] });
+      qc.invalidateQueries({ queryKey: ['products'] });
+      setEditingCategory(null);
+    },
+  });
+
+  const deleteCatMutation = useMutation({
+    mutationFn: (id: number) => productQueries.deleteCategory(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['categories'] });
+      qc.invalidateQueries({ queryKey: ['products'] });
+      if (filterCategoryId !== null) setFilterCategoryId(null);
+    },
   });
 
   const saveVariantMutation = useMutation({
@@ -143,6 +169,29 @@ export default function ProductsScreen() {
   };
 
   const closeDialog = () => { setDialog(null); setEditing(null); setForm({ ...EMPTY_PRODUCT }); setCatName(''); setCatColor(C.accent); };
+
+  const handleAddCategory = () => {
+    if (!catName.trim()) { Alert.alert('Name Required', 'Enter a category name.'); return; }
+    catMutation.mutate();
+  };
+
+  const handleSaveCategory = () => {
+    if (!catEditName.trim()) { Alert.alert('Name Required', 'Enter a category name.'); return; }
+    updateCatMutation.mutate();
+  };
+
+  const handleDeleteCategory = (cat: Category) => {
+    Alert.alert('Delete Category', `Delete "${cat.name}"? Products in this category will become Uncategorized.`, [
+      { text: 'Cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteCatMutation.mutate(cat.id) },
+    ]);
+  };
+
+  const startEditCategory = (cat: Category) => {
+    setEditingCategory(cat);
+    setCatEditName(cat.name);
+    setCatEditColor(cat.color);
+  };
 
   const handleSaveProduct = () => {
     if (!form.name.trim()) {
@@ -212,8 +261,30 @@ export default function ProductsScreen() {
 
       <Searchbar placeholder="Search products..." value={search} onChangeText={setSearch} style={styles.searchbar} />
 
+      {(categories?.length ?? 0) > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterBar} contentContainerStyle={styles.filterBarContent}>
+          <Chip
+            selected={filterCategoryId === null}
+            onPress={() => setFilterCategoryId(null)}
+            style={[styles.filterChip, filterCategoryId === null && { backgroundColor: C.accent }]}
+            textStyle={filterCategoryId === null ? { color: '#fff', fontWeight: '700' } : { color: C.text }}
+            compact
+          >All</Chip>
+          {(categories ?? []).map((cat) => (
+            <Chip
+              key={cat.id}
+              selected={filterCategoryId === cat.id}
+              onPress={() => setFilterCategoryId(filterCategoryId === cat.id ? null : cat.id)}
+              style={[styles.filterChip, { backgroundColor: filterCategoryId === cat.id ? cat.color : cat.color + '33' }]}
+              textStyle={{ color: filterCategoryId === cat.id ? '#fff' : cat.color, fontWeight: '700' }}
+              compact
+            >{cat.name}</Chip>
+          ))}
+        </ScrollView>
+      )}
+
       <FlatList
-        data={products ?? []}
+        data={filteredProducts}
         keyExtractor={(p) => String(p.id)}
         contentContainerStyle={styles.list}
         renderItem={({ item }) => (
@@ -414,21 +485,83 @@ export default function ProductsScreen() {
           </Dialog.Actions>
         </Dialog>
 
-        {/* Category Dialog */}
-        <Dialog visible={dialog === 'category'} onDismiss={closeDialog}>
-          <Dialog.Title>Add Category</Dialog.Title>
-          <Dialog.Content>
-            <TextInput label="Category Name" value={catName} onChangeText={setCatName} mode="outlined" style={{ marginBottom: 16 }} />
-            <Text style={styles.sectionLabel}>Category Colour</Text>
-            <View style={styles.colorGrid}>
-              {PRESET_COLORS.map((c) => (
-                <Pressable key={c} style={[styles.colorSwatch, { backgroundColor: c }, catColor === c && styles.colorSelected]} onPress={() => setCatColor(c)} />
+        {/* Manage Categories Dialog */}
+        <Dialog visible={dialog === 'category'} onDismiss={() => { setDialog(null); setEditingCategory(null); setCatName(''); setCatColor(C.accent); }}>
+          <Dialog.Title>Manage Categories</Dialog.Title>
+          <ScrollView style={{ maxHeight: 480 }}>
+            <Dialog.Content>
+              {/* Existing categories list */}
+              {(categories?.length ?? 0) === 0 && (
+                <Text style={{ color: C.muted, marginBottom: 12, fontSize: 13 }}>No categories yet. Add one below.</Text>
+              )}
+              {(categories ?? []).map((cat) => (
+                <View key={cat.id}>
+                  {editingCategory?.id === cat.id ? (
+                    <View style={{ marginBottom: 10, padding: 10, borderRadius: 10, backgroundColor: C.elevated }}>
+                      <TextInput
+                        label="Category Name"
+                        value={catEditName}
+                        onChangeText={setCatEditName}
+                        mode="outlined"
+                        style={{ marginBottom: 8 }}
+                        autoFocus
+                      />
+                      <Text style={styles.sectionLabel}>Colour</Text>
+                      <View style={styles.colorGrid}>
+                        {PRESET_COLORS.map((c) => (
+                          <Pressable key={c} style={[styles.colorSwatch, { backgroundColor: c }, catEditColor === c && styles.colorSelected]} onPress={() => setCatEditColor(c)} />
+                        ))}
+                      </View>
+                      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, gap: 8 }}>
+                        <Button onPress={() => setEditingCategory(null)} compact>Cancel</Button>
+                        <Button mode="contained" onPress={handleSaveCategory} loading={updateCatMutation.isPending} compact>Save</Button>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={[styles.catListRow, { borderLeftColor: cat.color }]}>
+                      <View style={[styles.catDot, { backgroundColor: cat.color }]} />
+                      <Text style={[styles.catListName, { color: C.text }]}>{cat.name}</Text>
+                      <Pressable onPress={() => startEditCategory(cat)} style={{ padding: 6 }}>
+                        <MaterialCommunityIcons name="pencil-outline" size={18} color={C.muted} />
+                      </Pressable>
+                      <Pressable onPress={() => handleDeleteCategory(cat)} style={{ padding: 6 }}>
+                        <MaterialCommunityIcons name="trash-can-outline" size={18} color="#e53935" />
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
               ))}
-            </View>
-          </Dialog.Content>
+
+              <Divider style={{ marginVertical: 14 }} />
+
+              {/* Add new category */}
+              <Text style={[styles.sectionLabel, { fontSize: 13, fontWeight: '700', color: C.text, marginBottom: 8 }]}>Add New Category</Text>
+              <TextInput
+                label="Category Name"
+                value={catName}
+                onChangeText={setCatName}
+                mode="outlined"
+                style={{ marginBottom: 10 }}
+              />
+              <Text style={styles.sectionLabel}>Colour</Text>
+              <View style={styles.colorGrid}>
+                {PRESET_COLORS.map((c) => (
+                  <Pressable key={c} style={[styles.colorSwatch, { backgroundColor: c }, catColor === c && styles.colorSelected]} onPress={() => setCatColor(c)} />
+                ))}
+              </View>
+              <Button
+                mode="contained"
+                onPress={handleAddCategory}
+                loading={catMutation.isPending}
+                style={{ marginTop: 12 }}
+                icon="plus"
+              >
+                Add Category
+              </Button>
+            </Dialog.Content>
+          </ScrollView>
           <Dialog.Actions>
-            <Button onPress={closeDialog}>Cancel</Button>
-            <Button mode="contained" onPress={() => catMutation.mutate()} loading={catMutation.isPending}>Add</Button>
+            <Button onPress={() => { setDialog(null); setEditingCategory(null); setCatName(''); setCatColor(C.accent); }}>Done</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -469,5 +602,11 @@ function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
     colorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
     colorSwatch: { width: 36, height: 36, borderRadius: 18 },
     colorSelected: { borderWidth: 3, borderColor: C.text },
+    filterBar: { maxHeight: 44, flexGrow: 0 },
+    filterBarContent: { paddingHorizontal: 12, paddingVertical: 6, gap: 8, alignItems: 'center' },
+    filterChip: { backgroundColor: C.elevated },
+    catListRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 8, marginBottom: 6, borderRadius: 8, backgroundColor: C.elevated, borderLeftWidth: 4 },
+    catDot: { width: 12, height: 12, borderRadius: 6, marginRight: 10 },
+    catListName: { flex: 1, fontSize: 14, fontWeight: '600' },
   });
 }

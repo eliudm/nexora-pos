@@ -82,6 +82,11 @@ export const productQueries = {
     return r.lastInsertRowId;
   },
 
+  updateCategory: async (id: number, name: string, color: string): Promise<void> => {
+    const db = await getDb();
+    await db.runAsync('UPDATE categories SET name = ?, color = ? WHERE id = ?', [name, color, id]);
+  },
+
   deleteCategory: async (id: number): Promise<void> => {
     const db = await getDb();
     await db.runAsync('DELETE FROM categories WHERE id = ?', [id]);
