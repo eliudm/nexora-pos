@@ -4,10 +4,10 @@ import { Text, Appbar, Searchbar, FAB, Portal, Dialog, TextInput, Button, Card, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { customerQueries, Customer } from '../../src/db/customers';
-import { salesQueries, Sale } from '../../src/db/sales';
-import { loyaltyQueries, LoyaltyTransaction } from '../../src/db/loyalty';
-import { useTheme } from '../../src/context/theme';
+import { customerQueries, Customer } from '../../../src/db/customers';
+import { salesQueries, Sale } from '../../../src/db/sales';
+import { loyaltyQueries, LoyaltyTransaction } from '../../../src/db/loyalty';
+import { useTheme } from '../../../src/context/theme';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import dayjs from 'dayjs';
@@ -104,7 +104,7 @@ export default function CustomersScreen() {
     ).join('');
     const totalOwed = statementSales.filter((s) => s.payment_method === 'CREDIT' && s.status === 'PAID').reduce((sum, s) => sum + s.total, 0);
     const html = `<html><body style="font-family:sans-serif;padding:24px">
-      <h2>${statementCustomer.name} — Account Statement</h2>
+      <h2>${statementCustomer.name} â€” Account Statement</h2>
       <p>Phone: ${statementCustomer.phone ?? 'N/A'} &nbsp; Credit Balance: KES ${statementCustomer.credit_balance.toLocaleString()}</p>
       <p>Loyalty Points: ${(statementCustomer as any).loyalty_points ?? 0}</p>
       <hr/>
@@ -202,7 +202,7 @@ export default function CustomersScreen() {
 
         {/* Customer Statement */}
         <Dialog visible={!!statementCustomer} onDismiss={() => setStatementCustomer(null)} style={styles.wideDialog}>
-          <Dialog.Title>{statementCustomer?.name} — Statement</Dialog.Title>
+          <Dialog.Title>{statementCustomer?.name} â€” Statement</Dialog.Title>
           <Dialog.ScrollArea>
             <ScrollView style={{ maxHeight: 500 }}>
               <View style={styles.statRow}>
@@ -238,7 +238,7 @@ export default function CustomersScreen() {
 
         {/* Loyalty Points */}
         <Dialog visible={!!loyaltyCustomer} onDismiss={() => setLoyaltyCustomer(null)} style={styles.wideDialog}>
-          <Dialog.Title>Loyalty Points — {loyaltyCustomer?.name}</Dialog.Title>
+          <Dialog.Title>Loyalty Points â€” {loyaltyCustomer?.name}</Dialog.Title>
           <Dialog.ScrollArea>
             <ScrollView style={{ maxHeight: 460 }}>
               <View style={styles.loyaltyBalance}>

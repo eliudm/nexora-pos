@@ -7,13 +7,13 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import dayjs from 'dayjs';
-import { salesQueries } from '../../src/db/sales';
-import { productQueries } from '../../src/db/products';
-import { customerQueries } from '../../src/db/customers';
-import { cashDrawerQueries } from '../../src/db/cash_drawer';
-import { shiftQueries } from '../../src/db/shifts';
-import { getBusinessInfo } from '../../src/db/settings';
-import { useTheme } from '../../src/context/theme';
+import { salesQueries } from '../../../src/db/sales';
+import { productQueries } from '../../../src/db/products';
+import { customerQueries } from '../../../src/db/customers';
+import { cashDrawerQueries } from '../../../src/db/cash_drawer';
+import { shiftQueries } from '../../../src/db/shifts';
+import { getBusinessInfo } from '../../../src/db/settings';
+import { useTheme } from '../../../src/context/theme';
 
 type Period = 'today' | 'week' | 'month';
 type ReportTab = 'sales' | 'profit' | 'stock' | 'customers' | 'vat' | 'reconcile';
@@ -125,7 +125,7 @@ export default function ReportsScreen() {
     ).join('');
     const html = `
       <html><body style="font-family:sans-serif;padding:24px;max-width:700px;margin:0 auto">
-        <h1 style="color:#1db8a0">${bizInfo?.name ?? 'Nexora POS'} — Sales Report</h1>
+        <h1 style="color:#1db8a0">${bizInfo?.name ?? 'Nexora POS'} â€” Sales Report</h1>
         <p style="color:#666">Period: <b>${label}</b> (${from} to ${to})</p>
         <hr/>
         <h2>Summary</h2>
@@ -353,7 +353,7 @@ export default function ReportsScreen() {
             </Card>
             {lowStockItems.length > 0 && (
               <Card style={styles.card}>
-                <Card.Title title="⚠ Low Stock Alerts" titleStyle={[styles.cardTitle, { color: '#f59e0b' }]} />
+                <Card.Title title="âš  Low Stock Alerts" titleStyle={[styles.cardTitle, { color: '#f59e0b' }]} />
                 <Card.Content>
                   {lowStockItems.map((p) => (
                     <View key={p.id} style={styles.stockAlertRow}>
@@ -427,7 +427,7 @@ export default function ReportsScreen() {
               <Card.Content>
                 {openShift ? (
                   <Text style={{ fontSize: 12, color: '#22c55e', marginBottom: 8 }}>
-                    Shift open — {openShift.cashier_name} since {dayjs(openShift.opened_at).format('HH:mm')} · Opening cash: {fmt(openShift.opening_cash)}
+                    Shift open â€” {openShift.cashier_name} since {dayjs(openShift.opened_at).format('HH:mm')} Â· Opening cash: {fmt(openShift.opening_cash)}
                   </Text>
                 ) : (
                   <Text style={{ fontSize: 12, color: '#aaa', marginBottom: 8 }}>No open shift</Text>

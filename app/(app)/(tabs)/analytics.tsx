@@ -6,8 +6,8 @@ import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { BarChart, LineChart, PieChart } from 'react-native-gifted-charts';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { salesQueries } from '../../src/db/sales';
-import { useTheme } from '../../src/context/theme';
+import { salesQueries } from '../../../src/db/sales';
+import { useTheme } from '../../../src/context/theme';
 import dayjs from 'dayjs';
 
 type Period = '7d' | '14d' | '30d';
@@ -158,7 +158,7 @@ export default function AnalyticsScreen() {
           <View style={styles.kpiCard}>
             <MaterialCommunityIcons name="star" size={22} color="#22c55e" />
             <Text style={[styles.kpiVal, { color: '#22c55e', fontSize: 13 }]}>
-              {bestDay ? dayjs(bestDay.date).format('D MMM') : '—'}
+              {bestDay ? dayjs(bestDay.date).format('D MMM') : 'â€”'}
             </Text>
             <Text style={styles.kpiLabel}>Best Day</Text>
           </View>
@@ -222,7 +222,7 @@ export default function AnalyticsScreen() {
               barBorderRadius={2}
               isAnimated
             />
-            <Text style={styles.chartNote}>Highlighted bars = business hours (8am–8pm)</Text>
+            <Text style={styles.chartNote}>Highlighted bars = business hours (8amâ€“8pm)</Text>
           </Card.Content>
         </Card>
 
@@ -308,7 +308,7 @@ export default function AnalyticsScreen() {
               <BarChart
                 data={(categorySales ?? []).map((c, i) => ({
                   value: c.revenue,
-                  label: c.category_name.length > 8 ? c.category_name.slice(0, 7) + '…' : c.category_name,
+                  label: c.category_name.length > 8 ? c.category_name.slice(0, 7) + 'â€¦' : c.category_name,
                   frontColor: CAT_COLORS[i % CAT_COLORS.length],
                   topLabelComponent: () => (
                     <Text style={{ fontSize: 9, color: '#666', marginBottom: 2 }}>{fmt(c.revenue)}</Text>

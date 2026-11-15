@@ -4,7 +4,7 @@ import { Text, Appbar } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useTheme } from '../../src/context/theme';
+import { useTheme } from '../../../src/context/theme';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -20,33 +20,33 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
   {
     title: 'Purchasing',
     items: [
-      { label: 'Purchase Orders', description: 'Order stock from suppliers', icon: 'file-document-outline', route: '/(app)/purchase-orders', color: '#6f67ff' },
-      { label: 'Suppliers', description: 'Manage your suppliers', icon: 'truck-delivery-outline', route: '/(app)/suppliers', color: '#3b82f6' },
+      { label: 'Purchase Orders', description: 'Order stock from suppliers', icon: 'file-document-outline', route: '/purchase-orders', color: '#6f67ff' },
+      { label: 'Suppliers', description: 'Manage your suppliers', icon: 'truck-delivery-outline', route: '/suppliers', color: '#3b82f6' },
     ],
   },
   {
     title: 'Sales Tools',
     items: [
-      { label: 'Quotations', description: 'Create and send quotes', icon: 'file-percent-outline', route: '/(app)/quotations', color: '#f59e0b' },
-      { label: 'Layaway', description: 'Reserved / deposit sales', icon: 'calendar-clock-outline', route: '/(app)/layaway', color: '#8b5cf6' },
+      { label: 'Quotations', description: 'Create and send quotes', icon: 'file-percent-outline', route: '/quotations', color: '#f59e0b' },
+      { label: 'Layaway', description: 'Reserved / deposit sales', icon: 'calendar-clock-outline', route: '/layaway', color: '#8b5cf6' },
     ],
   },
   {
     title: 'Inventory',
     items: [
-      { label: 'Stock Take', description: 'Count and reconcile stock', icon: 'clipboard-list-outline', route: '/(app)/stocktake', color: '#22c55e' },
+      { label: 'Stock Take', description: 'Count and reconcile stock', icon: 'clipboard-list-outline', route: '/stocktake', color: '#22c55e' },
     ],
   },
   {
     title: 'Finance',
     items: [
-      { label: 'Expenses', description: 'Track business expenses', icon: 'cash-minus', route: '/(app)/expenses', color: '#e53935' },
+      { label: 'Expenses', description: 'Track business expenses', icon: 'cash-minus', route: '/expenses', color: '#e53935' },
     ],
   },
   {
     title: 'Support',
     items: [
-      { label: 'Help & Support', description: 'FAQs and guides', icon: 'help-circle-outline', route: '/(app)/help', color: '#1db8a0' },
+      { label: 'Help & Support', description: 'FAQs and guides', icon: 'help-circle-outline', route: '/help', color: '#1db8a0' },
     ],
   },
 ];

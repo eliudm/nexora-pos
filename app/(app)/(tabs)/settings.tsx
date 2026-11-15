@@ -7,15 +7,15 @@ import { router } from 'expo-router';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
-import { getBusinessInfo, setSetting, getSetting } from '../../src/db/settings';
-import { PrinterSetup } from '../../src/components/PrinterSetup';
-import { getDb } from '../../src/db/database';
-import { shiftQueries } from '../../src/db/shifts';
-import { stockLogQueries } from '../../src/db/stock_log';
-import { cashDrawerQueries } from '../../src/db/cash_drawer';
-import { darajaService, DarajaConfig } from '../../src/services/mpesa_daraja';
-import { useSession } from '../../src/context/session';
-import { useTheme } from '../../src/context/theme';
+import { getBusinessInfo, setSetting, getSetting } from '../../../src/db/settings';
+import { PrinterSetup } from '../../../src/components/PrinterSetup';
+import { getDb } from '../../../src/db/database';
+import { shiftQueries } from '../../../src/db/shifts';
+import { stockLogQueries } from '../../../src/db/stock_log';
+import { cashDrawerQueries } from '../../../src/db/cash_drawer';
+import { darajaService, DarajaConfig } from '../../../src/services/mpesa_daraja';
+import { useSession } from '../../../src/context/session';
+import { useTheme } from '../../../src/context/theme';
 import dayjs from 'dayjs';
 
 function EtimsFields() {
@@ -28,7 +28,7 @@ function EtimsFields() {
 
   useEffect(() => {
     (async () => {
-      const { getSetting } = await import('../../src/db/settings');
+      const { getSetting } = await import('../../../src/db/settings');
       setSerial((await getSetting('etims_device_serial')) ?? '');
       setBhfId((await getSetting('etims_bhf_id')) ?? '00');
       setServerUrl((await getSetting('etims_server_url')) ?? 'https://etims-api.kra.go.ke');
@@ -38,7 +38,7 @@ function EtimsFields() {
 
   const handleSave = async () => {
     setSaving(true);
-    const { setSetting } = await import('../../src/db/settings');
+    const { setSetting } = await import('../../../src/db/settings');
     await Promise.all([
       setSetting('etims_device_serial', serial.trim()),
       setSetting('etims_bhf_id', bhfId.trim()),
@@ -347,8 +347,8 @@ export default function SettingsScreen() {
             {openShift ? (
               <>
                 <List.Item
-                  title={`Shift Open — ${openShift.cashier_name}`}
-                  description={`Opened ${dayjs(openShift.opened_at).format('D MMM HH:mm')} · Opening cash: ${fmt(openShift.opening_cash)}`}
+                  title={`Shift Open â€” ${openShift.cashier_name}`}
+                  description={`Opened ${dayjs(openShift.opened_at).format('D MMM HH:mm')} Â· Opening cash: ${fmt(openShift.opening_cash)}`}
                   left={(p) => <List.Icon {...p} icon="clock-check" color="#22c55e" />}
                 />
                 <Card.Content>
@@ -459,7 +459,7 @@ export default function SettingsScreen() {
                 <Button mode={!waEnabled ? 'contained' : 'outlined'} onPress={() => setWaEnabled(false)} compact style={{ flex: 1 }}>Disabled</Button>
               </View>
 
-              <Text style={[styles.subSection, { marginTop: 16 }]}>Africa's Talking — SMS</Text>
+              <Text style={[styles.subSection, { marginTop: 16 }]}>Africa's Talking â€” SMS</Text>
               <Text style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Send SMS receipts via Africa's Talking. Register at africastalking.com</Text>
               <TextInput label="API Key" value={atsApiKey} onChangeText={setAtsApiKey} mode="outlined" style={styles.input} autoCapitalize="none" secureTextEntry />
               <TextInput label="Sender ID (shortcode)" value={atsSenderId} onChangeText={setAtsSenderId} mode="outlined" style={styles.input} />
@@ -509,7 +509,7 @@ export default function SettingsScreen() {
 
           <Text style={styles.section}>About</Text>
           <Card style={styles.card}>
-            <List.Item title="Nexora POS" description="Version 1.0.0 — Standalone Android POS" left={(p) => <List.Icon {...p} icon="cash-register" color={C.accent} />} />
+            <List.Item title="Nexora POS" description="Version 1.0.0 â€” Standalone Android POS" left={(p) => <List.Icon {...p} icon="cash-register" color={C.accent} />} />
             <Divider />
             <List.Item title="Subscription" description="KES 600/month via Google Play" left={(p) => <List.Icon {...p} icon="google-play" color={C.accent} />} />
           </Card>
@@ -541,7 +541,7 @@ export default function SettingsScreen() {
                 <View key={s.id} style={styles.shiftRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.shiftCashier}>{s.cashier_name}</Text>
-                    <Text style={styles.shiftTime}>{dayjs(s.opened_at).format('D MMM HH:mm')} → {s.closed_at ? dayjs(s.closed_at).format('HH:mm') : 'Open'}</Text>
+                    <Text style={styles.shiftTime}>{dayjs(s.opened_at).format('D MMM HH:mm')} â†’ {s.closed_at ? dayjs(s.closed_at).format('HH:mm') : 'Open'}</Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={styles.shiftRev}>{fmt(s.total_revenue)}</Text>

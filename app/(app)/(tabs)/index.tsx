@@ -6,9 +6,9 @@ import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import dayjs from 'dayjs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { salesQueries } from '../../src/db/sales';
-import { getBusinessInfo } from '../../src/db/settings';
-import { useTheme } from '../../src/context/theme';
+import { salesQueries } from '../../../src/db/sales';
+import { getBusinessInfo } from '../../../src/db/settings';
+import { useTheme } from '../../../src/context/theme';
 
 export default function DashboardScreen() {
   const { colors: D } = useTheme();

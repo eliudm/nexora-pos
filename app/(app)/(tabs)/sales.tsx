@@ -4,9 +4,9 @@ import { Text, Appbar, Card, Chip, Portal, Dialog, Button, Divider, DataTable } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import { salesQueries, Sale } from '../../src/db/sales';
-import { useSession } from '../../src/context/session';
-import { useTheme } from '../../src/context/theme';
+import { salesQueries, Sale } from '../../../src/db/sales';
+import { useSession } from '../../../src/context/session';
+import { useTheme } from '../../../src/context/theme';
 
 const PM_COLORS: Record<string, string> = {
   CASH: '#22c55e',
@@ -124,7 +124,7 @@ export default function SalesScreen() {
 
       <Portal>
         <Dialog visible={!!selected} onDismiss={() => setSelected(null)}>
-          <Dialog.Title>Receipt — {selected?.invoice_no}</Dialog.Title>
+          <Dialog.Title>Receipt â€” {selected?.invoice_no}</Dialog.Title>
           <Dialog.Content>
             <Text style={styles.receiptDate}>{dayjs(selected?.created_at).format('D MMM YYYY, HH:mm')}</Text>
             {selected?.customer_name && <Text style={styles.receiptCustomer}>Customer: {selected.customer_name}</Text>}

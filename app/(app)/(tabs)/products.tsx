@@ -6,11 +6,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { productQueries, Product, Category } from '../../src/db/products';
-import { wastageQueries, WASTAGE_REASONS } from '../../src/db/wastage';
-import { variantQueries, ProductVariant } from '../../src/db/variants';
-import { useSession } from '../../src/context/session';
-import { useTheme } from '../../src/context/theme';
+import { productQueries, Product, Category } from '../../../src/db/products';
+import { wastageQueries, WASTAGE_REASONS } from '../../../src/db/wastage';
+import { variantQueries, ProductVariant } from '../../../src/db/variants';
+import { useSession } from '../../../src/context/session';
+import { useTheme } from '../../../src/context/theme';
 
 type DialogMode = 'product' | 'category' | 'barcode' | 'wastage' | 'variants' | null;
 
@@ -359,7 +359,7 @@ export default function ProductsScreen() {
         {/* Variants Dialog */}
         <Dialog visible={dialog === 'variants'} onDismiss={() => { setDialog(null); setVariantProduct(null); }}>
           <Dialog.ScrollArea style={{ maxHeight: 500 }}>
-            <Dialog.Title>{variantProduct?.name} — Variants</Dialog.Title>
+            <Dialog.Title>{variantProduct?.name} â€” Variants</Dialog.Title>
             <View style={{ padding: 16 }}>
               {variants.length === 0 && <Text style={{ color: '#aaa', marginBottom: 12 }}>No variants yet. Add sizes, colours, etc.</Text>}
               {variants.map((v) => (
