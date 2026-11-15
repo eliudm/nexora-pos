@@ -533,7 +533,7 @@ export default function SettingsScreen() {
               description="KES 600/month · Manage your plan"
               left={(p) => <List.Icon {...p} icon="star-circle" color="#f59e0b" />}
               right={(p) => <List.Icon {...p} icon="chevron-right" />}
-              onPress={() => setSubscriptionOpen(true)}
+              onPress={() => router.push('/(app)/subscription')}
             />
           </Card>
 
