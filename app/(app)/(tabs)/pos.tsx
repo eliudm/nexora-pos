@@ -18,7 +18,7 @@ import { getBusinessInfo } from '../../../src/db/settings';
 import { useSession } from '../../../src/context/session';
 import { etimsService } from '../../../src/services/etims';
 import { printerService } from '../../../src/services/printer';
-import { buildReceiptText, buildReceiptHtml, ReceiptSale } from '../../../src/services/receipt';
+import { buildReceiptText, buildReceiptHtml, buildInvoiceHtml, ReceiptSale } from '../../../src/services/receipt';
 import { darajaService } from '../../../src/services/mpesa_daraja';
 import { whatsappService } from '../../../src/services/whatsapp';
 import { smsService } from '../../../src/services/sms';
@@ -313,7 +313,7 @@ export default function POSScreen() {
 
   const fallbackPrint = async (receiptSale: ReceiptSale) => {
     if (!bizInfo) return;
-    const html = buildReceiptHtml(receiptSale, {
+    const bizData = {
       name: bizInfo.name ?? '',
       phone: bizInfo.phone,
       address: bizInfo.address,
@@ -321,12 +321,16 @@ export default function POSScreen() {
       receiptFooter: bizInfo.receiptFooter,
       mpesaPaybill: bizInfo.mpesaPaybill,
       mpesaTill: bizInfo.mpesaTill,
-    });
+    };
     Alert.alert('Receipt', 'Share or print receipt:', [
-      { text: 'Print via System', onPress: async () => { await Print.printAsync({ html }); } },
-      { text: 'Share as PDF', onPress: async () => {
+      { text: 'Print Receipt', onPress: async () => {
+        const html = buildReceiptHtml(receiptSale, bizData);
+        await Print.printAsync({ html });
+      }},
+      { text: 'Save as PDF Invoice', onPress: async () => {
+        const html = buildInvoiceHtml(receiptSale, bizData);
         const { uri } = await Print.printToFileAsync({ html });
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Share Receipt' });
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Share Invoice' });
       }},
       { text: 'Skip', style: 'cancel' },
     ]);
