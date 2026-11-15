@@ -23,6 +23,12 @@ interface MenuItem {
 
 const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
   {
+    title: 'Intelligence',
+    items: [
+      { label: 'AI Insights', description: 'AI-powered sales & inventory analysis', icon: 'brain', route: '/ai-insights', color: '#6f67ff' },
+    ],
+  },
+  {
     title: 'Purchasing',
     items: [
       { label: 'Purchase Orders', description: 'Order stock from suppliers', icon: 'file-document-outline', route: '/purchase-orders', color: '#6f67ff' },

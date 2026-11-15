@@ -105,6 +105,7 @@ export default function SettingsScreen() {
   const [waEnabled, setWaEnabled] = useState(false);
   const [atsApiKey, setAtsApiKey] = useState('');
   const [atsSenderId, setAtsSenderId] = useState('');
+  const [anthropicKey, setAnthropicKey] = useState('');
   const [savingIntegrations, setSavingIntegrations] = useState(false);
 
   useEffect(() => {
@@ -131,10 +132,12 @@ export default function SettingsScreen() {
       getSetting('wa_receipts_enabled'),
       getSetting('ats_api_key'),
       getSetting('ats_sender_id'),
-    ]).then(([wa, ak, sid]) => {
+      getSetting('anthropic_api_key'),
+    ]).then(([wa, ak, sid, ant]) => {
       setWaEnabled(wa === '1');
       setAtsApiKey(ak ?? '');
       setAtsSenderId(sid ?? '');
+      setAnthropicKey(ant ?? '');
     });
   }, []);
 
@@ -298,6 +301,7 @@ export default function SettingsScreen() {
         setSetting('wa_receipts_enabled', waEnabled ? '1' : '0'),
         setSetting('ats_api_key', atsApiKey.trim()),
         setSetting('ats_sender_id', atsSenderId.trim()),
+        setSetting('anthropic_api_key', anthropicKey.trim()),
       ]);
       Alert.alert('Saved', 'Integration settings updated.');
     } finally {
@@ -463,6 +467,11 @@ export default function SettingsScreen() {
               <Text style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Send SMS receipts via Africa's Talking. Register at africastalking.com</Text>
               <TextInput label="API Key" value={atsApiKey} onChangeText={setAtsApiKey} mode="outlined" style={styles.input} autoCapitalize="none" secureTextEntry />
               <TextInput label="Sender ID (shortcode)" value={atsSenderId} onChangeText={setAtsSenderId} mode="outlined" style={styles.input} />
+
+              <Text style={[styles.subSection, { marginTop: 16 }]}>Claude AI — Business Insights</Text>
+              <Text style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Powers AI Insights. Get a free API key at console.anthropic.com</Text>
+              <TextInput label="Anthropic API Key (sk-ant-...)" value={anthropicKey} onChangeText={setAnthropicKey} mode="outlined" style={styles.input} autoCapitalize="none" secureTextEntry />
+
               <Button mode="outlined" onPress={handleSaveIntegrations} loading={savingIntegrations} style={{ marginTop: 4 }}>Save Integration Settings</Button>
             </Card.Content>
           </Card>
