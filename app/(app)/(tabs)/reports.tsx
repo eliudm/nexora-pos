@@ -115,12 +115,16 @@ export default function ReportsScreen() {
   const debtCustomers = (allCustomers ?? []).filter((c) => c.credit_balance < 0);
   const totalDebt = debtCustomers.reduce((s, c) => s + Math.abs(c.credit_balance), 0);
 
-  const totalRevenue = (sales ?? []).reduce((s, x) => s + x.total, 0);
-  const totalVAT = (sales ?? []).reduce((s, x) => s + x.tax_amount, 0);
+  // Only count PAID sales in financial totals — matches the getCOGS filter
+  const paidSales = (sales ?? []).filter((x) => x.status === 'PAID');
+  const totalRevenue = paidSales.reduce((s, x) => s + x.total, 0);
+  const totalVAT = paidSales.reduce((s, x) => s + x.tax_amount, 0);
+  const revenueExVAT = totalRevenue - totalVAT;
+  const grossProfit = revenueExVAT - totalCOGS;
   const netVATToKRA = totalVAT - inputVAT;
-  const cashTotal = (sales ?? []).filter((x) => x.payment_method === 'CASH').reduce((s, x) => s + x.total, 0);
-  const mpesaTotal = (sales ?? []).filter((x) => x.payment_method === 'MPESA').reduce((s, x) => s + x.total, 0);
-  const creditTotal = (sales ?? []).filter((x) => x.payment_method === 'CREDIT').reduce((s, x) => s + x.total, 0);
+  const cashTotal = paidSales.filter((x) => x.payment_method === 'CASH').reduce((s, x) => s + x.total, 0);
+  const mpesaTotal = paidSales.filter((x) => x.payment_method === 'MPESA').reduce((s, x) => s + x.total, 0);
+  const creditTotal = paidSales.filter((x) => x.payment_method === 'CREDIT').reduce((s, x) => s + x.total, 0);
 
   const fmt = (n: number) => `KES ${n.toLocaleString('en-KE', { maximumFractionDigits: 0 })}`;
 
@@ -321,16 +325,25 @@ export default function ReportsScreen() {
               <Card.Title title="Profit & Loss" titleStyle={styles.cardTitle} />
               <Card.Content>
                 <View style={styles.bigStat}>
-                  <Text style={[styles.bigVal, { color: (totalRevenue - totalVAT - totalCOGS) >= 0 ? '#22c55e' : '#e53935' }]}>
-                    KES {(totalRevenue - totalVAT - totalCOGS).toLocaleString('en-KE', { maximumFractionDigits: 0 })}
+                  <Text style={[styles.bigVal, { color: grossProfit >= 0 ? '#22c55e' : '#e53935' }]}>
+                    {grossProfit < 0 ? '-' : ''}KES {Math.abs(grossProfit).toLocaleString('en-KE', { maximumFractionDigits: 0 })}
                   </Text>
-                  <Text style={styles.bigLabel}>Gross Profit (est.)</Text>
+                  <Text style={styles.bigLabel}>
+                    Gross Profit (est.) {revenueExVAT > 0 ? `· ${((grossProfit / revenueExVAT) * 100).toFixed(1)}% margin` : ''}
+                  </Text>
                 </View>
+                {grossProfit < 0 && totalCOGS > 0 && (
+                  <View style={{ backgroundColor: '#fff3cd', borderRadius: 8, padding: 10, marginBottom: 8 }}>
+                    <Text style={{ fontSize: 12, color: '#856404' }}>
+                      ⚠ Cost of goods exceeds revenue. Check that product cost prices are set correctly and are lower than their selling prices.
+                    </Text>
+                  </View>
+                )}
                 <Divider style={{ marginVertical: 12 }} />
                 {[
                   { label: 'Revenue (incl. VAT)', value: totalRevenue, color: C.accent },
                   { label: 'Output VAT (payable)', value: -totalVAT, color: '#f59e0b' },
-                  { label: 'Revenue (excl. VAT)', value: totalRevenue - totalVAT, color: '#3b82f6' },
+                  { label: 'Revenue (excl. VAT)', value: revenueExVAT, color: '#3b82f6' },
                   { label: 'Est. Cost of Goods Sold', value: -totalCOGS, color: '#e53935' },
                 ].map(({ label, value, color }) => (
                   <View key={label} style={styles.plRow}>
