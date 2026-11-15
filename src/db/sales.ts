@@ -216,7 +216,7 @@ export const salesQueries = {
       FROM sale_items si
       JOIN sales s ON si.sale_id = s.id
       WHERE date(s.created_at) BETWEEN ? AND ? AND s.status = 'PAID'
-      GROUP BY si.product_id, si.product_name
+      GROUP BY si.product_name
       ORDER BY total_revenue DESC LIMIT ?
     `, [from, to, limit]);
   },
