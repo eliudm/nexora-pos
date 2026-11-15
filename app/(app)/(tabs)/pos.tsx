@@ -82,6 +82,10 @@ export default function POSScreen() {
   const [itemDiscountItem, setItemDiscountItem] = useState<CartItem | null>(null);
   const [itemDiscountInput, setItemDiscountInput] = useState('');
 
+  // Price override dialog
+  const [priceEditItem, setPriceEditItem] = useState<CartItem | null>(null);
+  const [priceEditInput, setPriceEditInput] = useState('');
+
   // Scanner
   const [scannerVisible, setScannerVisible] = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
@@ -265,6 +269,7 @@ export default function POSScreen() {
         unit_price: product.price, cost_price: product.cost, discount: 0, vat_rate: product.vat_rate,
         vat_amount: vatAmt, total: product.price,
         track_stock: product.track_stock, stock_qty: product.stock_qty,
+        original_price: product.price,
       }];
     });
   }, []);
@@ -288,11 +293,20 @@ export default function POSScreen() {
   const applyItemDiscount = (productId: number, discountAmt: number) => {
     setCart((prev) => prev.map((i) => {
       if (i.product_id !== productId) return i;
-      const baseTotal = i.unit_price * i.qty; // inclusive price, no VAT addition
+      const baseTotal = i.unit_price * i.qty;
       const rate = i.vat_rate / 100;
       const newTotal = Math.max(0, baseTotal - discountAmt);
       const vatAmt = newTotal * rate / (1 + rate);
       return { ...i, discount: discountAmt, vat_amount: vatAmt, total: newTotal };
+    }));
+  };
+
+  const updateUnitPrice = (productId: number, newPrice: number) => {
+    setCart((prev) => prev.map((i) => {
+      if (i.product_id !== productId) return i;
+      const rate = i.vat_rate / 100;
+      const vatAmt = newPrice * i.qty * rate / (1 + rate);
+      return { ...i, unit_price: newPrice, discount: 0, vat_amount: vatAmt, total: newPrice * i.qty };
     }));
   };
 
@@ -748,7 +762,11 @@ export default function POSScreen() {
                 <View style={[styles.cartItem, { borderBottomColor: D.border, paddingHorizontal: 16 }]}>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.cartItemName, { color: D.text }]} numberOfLines={1}>{item.product_name}</Text>
-                    <Text style={[styles.cartItemPrice, { color: D.muted }]}>@ KES {item.unit_price.toLocaleString()}{item.discount > 0 ? `  -${item.discount.toFixed(0)}` : ''}</Text>
+                    <Pressable onPress={() => { setPriceEditItem(item); setPriceEditInput(String(item.unit_price)); }}>
+                      <Text style={[styles.cartItemPrice, { color: item.original_price != null && item.unit_price !== item.original_price ? D.warning : D.muted, textDecorationLine: 'underline' }]}>
+                        @ KES {item.unit_price.toLocaleString()}{item.discount > 0 ? `  –${item.discount.toFixed(0)}` : ''}
+                      </Text>
+                    </Pressable>
                   </View>
                   <View style={styles.qtyRow}>
                     <Pressable style={[styles.qtyBtn, { backgroundColor: D.elevated, borderColor: '#e53935' }]} onPress={() => updateQty(item.product_id, item.qty - 1)}>
@@ -1286,6 +1304,62 @@ export default function POSScreen() {
               if (itemDiscountItem) applyItemDiscount(itemDiscountItem.product_id, d);
               setItemDiscountItem(null);
             }}>Apply</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Price Override Dialog */}
+        <Dialog visible={!!priceEditItem} onDismiss={() => setPriceEditItem(null)} style={{ backgroundColor: D.surface }}>
+          <Dialog.Title style={{ color: D.text }}>Set Selling Price</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ marginBottom: 2, color: D.muted, fontWeight: '600' }}>{priceEditItem?.product_name}</Text>
+            {priceEditItem?.original_price != null && (
+              <Text style={{ marginBottom: 10, fontSize: 12, color: D.muted }}>
+                Catalogue price: KES {priceEditItem.original_price.toLocaleString()}
+              </Text>
+            )}
+            <RNTextInput
+              value={priceEditInput}
+              onChangeText={setPriceEditInput}
+              keyboardType="decimal-pad"
+              style={[styles.darkInput, { color: D.text, borderColor: D.border, backgroundColor: D.elevated, fontSize: 24, textAlign: 'center', fontWeight: '700' }]}
+              placeholderTextColor={D.muted}
+              autoFocus
+              selectTextOnFocus
+              placeholder="0.00"
+              onSubmitEditing={() => {
+                const p = parseFloat(priceEditInput);
+                if (priceEditItem && !isNaN(p) && p >= 0) updateUnitPrice(priceEditItem.product_id, p);
+                setPriceEditItem(null);
+              }}
+            />
+            <Text style={{ fontSize: 11, color: D.muted, textAlign: 'center', marginTop: 8 }}>
+              Applies to this sale only. Any item discount will be cleared.
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            {priceEditItem?.original_price != null && priceEditItem.unit_price !== priceEditItem.original_price && (
+              <Button
+                textColor={D.muted}
+                onPress={() => {
+                  updateUnitPrice(priceEditItem.product_id, priceEditItem.original_price!);
+                  setPriceEditItem(null);
+                }}
+              >
+                Reset
+              </Button>
+            )}
+            <Button textColor={D.muted} onPress={() => setPriceEditItem(null)}>Cancel</Button>
+            <Button
+              mode="contained"
+              buttonColor={D.accent}
+              onPress={() => {
+                const p = parseFloat(priceEditInput);
+                if (priceEditItem && !isNaN(p) && p >= 0) updateUnitPrice(priceEditItem.product_id, p);
+                setPriceEditItem(null);
+              }}
+            >
+              Set Price
+            </Button>
           </Dialog.Actions>
         </Dialog>
 

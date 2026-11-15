@@ -13,6 +13,7 @@ export interface CartItem {
   total: number;
   track_stock?: number;
   stock_qty?: number;
+  original_price?: number;
 }
 
 export interface SplitPayment {
