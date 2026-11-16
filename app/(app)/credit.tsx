@@ -80,6 +80,7 @@ export default function CreditScreen() {
       qc.invalidateQueries({ queryKey: ['credit-summary'] });
       qc.invalidateQueries({ queryKey: ['credit-ledger', selectedDebtor?.id] });
       qc.invalidateQueries({ queryKey: ['customers'] });
+      qc.invalidateQueries({ queryKey: ['daily-summary'] });
       setRepayVisible(false);
       setRepayAmount('');
       setRepayMethod('CASH');
