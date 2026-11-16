@@ -44,7 +44,7 @@ export default function PinLoginScreen() {
       );
       if (user) {
         setUser({ id: user.id, name: user.name, role: user.role as 'ADMIN' | 'CASHIER' });
-        router.replace('/(app)');
+        router.replace('/(app)' as any);
       } else {
         Vibration.vibrate(400);
         setError('Incorrect PIN. Try again.');

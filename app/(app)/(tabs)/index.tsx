@@ -87,7 +87,7 @@ export default function DashboardScreen() {
         </View>
         <Pressable
           style={[styles.posBtn, { backgroundColor: D.accent }]}
-          onPress={() => router.push('/(app)/pos')}
+          onPress={() => router.push('/(app)/pos' as any)}
         >
           <MaterialCommunityIcons name="cash-register" size={16} color="#fff" />
           <Text style={styles.posBtnText}>Open POS</Text>
@@ -192,7 +192,7 @@ export default function DashboardScreen() {
         {(topProducts?.length ?? 0) > 0 && (
           <Pressable
             style={[styles.card, { backgroundColor: D.surface, borderColor: D.border }]}
-            onPress={() => router.push('/(app)/analytics')}
+            onPress={() => router.push('/(app)/analytics' as any)}
           >
             <View style={styles.cardHeader}>
               <Text style={[styles.cardTitle, { color: D.text }]}>Top Products</Text>
@@ -218,7 +218,7 @@ export default function DashboardScreen() {
         {(trend?.length ?? 0) > 0 && (
           <Pressable
             style={[styles.card, { backgroundColor: D.surface, borderColor: D.border }]}
-            onPress={() => router.push('/(app)/reports')}
+            onPress={() => router.push('/(app)/reports' as any)}
           >
             <View style={styles.cardHeader}>
               <Text style={[styles.cardTitle, { color: D.text }]}>Revenue Trend</Text>
