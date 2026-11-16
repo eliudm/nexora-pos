@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { customerQueries, Customer } from '../../../src/db/customers';
+import { router } from 'expo-router';
 import { salesQueries, Sale } from '../../../src/db/sales';
 import { loyaltyQueries, LoyaltyTransaction } from '../../../src/db/loyalty';
 import { useTheme } from '../../../src/context/theme';
@@ -146,10 +147,17 @@ export default function CustomersScreen() {
                 <Text style={styles.name}>{item.name}</Text>
                 {item.phone && <Text style={styles.sub}>{item.phone}</Text>}
                 <View style={styles.badgeRow}>
-                  {item.credit_balance !== 0 && (
-                    <Chip compact style={[styles.badge, item.credit_balance > 0 ? styles.creditPosBg : styles.creditNegBg]}
-                      textStyle={{ fontSize: 10, color: item.credit_balance > 0 ? '#16a34a' : '#dc2626' }}>
-                      KES {item.credit_balance.toLocaleString()}
+                  {item.credit_balance < 0 && (
+                    <Chip compact icon="alert-circle-outline"
+                      style={[styles.badge, { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fca5a5' }]}
+                      textStyle={{ fontSize: 10, color: '#dc2626', fontWeight: '700' }}>
+                      Owes KES {Math.abs(item.credit_balance).toLocaleString('en-KE')}
+                    </Chip>
+                  )}
+                  {item.credit_balance > 0 && (
+                    <Chip compact style={[styles.badge, { backgroundColor: '#f0fdf4' }]}
+                      textStyle={{ fontSize: 10, color: '#16a34a' }}>
+                      Credit KES {item.credit_balance.toLocaleString('en-KE')}
                     </Chip>
                   )}
                   {(item as any).loyalty_points > 0 && (
@@ -168,6 +176,9 @@ export default function CustomersScreen() {
                 <Menu.Item onPress={() => { setMenuId(null); openEdit(item); }} title="Edit" />
                 <Menu.Item onPress={() => { setMenuId(null); setStatementCustomer(item); }} title="View Statement" leadingIcon="file-document" />
                 <Menu.Item onPress={() => { setMenuId(null); setLoyaltyCustomer(item); }} title="Loyalty Points" leadingIcon="star" />
+                {item.credit_balance < 0 && (
+                  <Menu.Item onPress={() => { setMenuId(null); router.push('/(app)/credit' as any); }} title="Manage Credit" leadingIcon="credit-card-clock-outline" titleStyle={{ color: '#6f67ff' }} />
+                )}
                 <Divider />
                 <Menu.Item onPress={() => { setMenuId(null); handleDelete(item.id); }} title="Delete" titleStyle={{ color: '#e53935' }} />
               </Menu>
