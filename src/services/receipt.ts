@@ -328,3 +328,133 @@ export function buildInvoiceHtml(sale: ReceiptSale, biz: BusinessInfo): string {
 
   </body></html>`;
 }
+
+// ─── Layaway receipt ───────────────────────────────────────────────────────
+
+export interface LayawayReceiptData {
+  layawayNo: string;
+  customerName: string;
+  customerPhone?: string | null;
+  description?: string | null;
+  items: Array<{ product_name: string; qty: number; unit_price: number }>;
+  totalAmount: number;
+  depositPaid: number;
+  balanceDue: number;
+  paymentMethod: string;
+  mpesaRef?: string | null;
+  cashierName?: string | null;
+  createdAt: string;
+  eventLabel: string; // e.g. "NEW LAYAWAY" or "PAYMENT RECEIVED"
+}
+
+export function buildLayawayReceiptText(lay: LayawayReceiptData, biz: BusinessInfo): string {
+  let r = '';
+  r += `[C]<b>${biz.name.toUpperCase()}</b>\n`;
+  if (biz.phone)   r += `[C]${biz.phone}\n`;
+  if (biz.address) r += `[C]${biz.address}\n`;
+  r += divider();
+  r += `[C]<b>LAYAWAY ${lay.eventLabel}</b>\n`;
+  r += divider();
+  r += `[L]Layaway #: ${lay.layawayNo}\n`;
+  r += `[L]Date: ${dayjs(lay.createdAt).format('D MMM YYYY HH:mm')}\n`;
+  r += `[L]Customer: ${lay.customerName}\n`;
+  if (lay.customerPhone) r += `[L]Phone: ${lay.customerPhone}\n`;
+  if (lay.cashierName)   r += `[L]Cashier: ${lay.cashierName}\n`;
+  r += divider();
+
+  if (lay.items.length > 0) {
+    r += `[L]<b>${pad('ITEM', 'TOTAL')}</b>\n`;
+    r += divider();
+    for (const item of lay.items) {
+      const name = item.product_name.length > 28 ? item.product_name.slice(0, 25) + '...' : item.product_name;
+      r += `[L]${pad(name, `KES ${(item.qty * item.unit_price).toFixed(0)}`)}\n`;
+      r += `[L]  ${item.qty} x KES ${item.unit_price.toLocaleString()}\n`;
+    }
+    r += divider();
+  } else if (lay.description) {
+    r += `[L]Item: ${lay.description}\n`;
+    r += divider();
+  }
+
+  r += `[L]${pad('TOTAL PRICE', `KES ${lay.totalAmount.toFixed(0)}`)}\n`;
+  r += divider('=');
+  r += `[L]<b>${pad('AMOUNT PAID', `KES ${lay.depositPaid.toFixed(0)}`)}</b>\n`;
+  r += divider('=');
+  r += `[L]<b>${pad('BALANCE DUE', `KES ${lay.balanceDue.toFixed(0)}`)}</b>\n`;
+  r += divider();
+
+  r += `[L]${pad('Payment', lay.paymentMethod)}\n`;
+  if (lay.mpesaRef) r += `[L]${pad('M-Pesa Ref', lay.mpesaRef)}\n`;
+
+  if (lay.balanceDue <= 0) {
+    r += divider();
+    r += `[C]<b>FULLY PAID - AWAITING COLLECTION</b>\n`;
+  } else {
+    r += divider();
+    r += `[C]Please keep this receipt as proof of payment.\n`;
+    r += `[C]Balance: KES ${lay.balanceDue.toFixed(0)} due on next visit.\n`;
+    if (biz.mpesaTill || biz.mpesaPaybill) {
+      r += divider();
+      r += `[C]PAY VIA M-PESA\n`;
+      if (biz.mpesaTill)    r += `[C]Till: ${biz.mpesaTill}\n`;
+      if (biz.mpesaPaybill) r += `[C]Paybill: ${biz.mpesaPaybill}\n`;
+    }
+  }
+
+  r += divider();
+  r += `[C]${biz.receiptFooter ?? 'Thank you for your business!'}\n`;
+  r += `[C]Powered by Nexora POS\n`;
+  r += '\n\n\n';
+  return r;
+}
+
+export function buildLayawayReceiptHtml(lay: LayawayReceiptData, biz: BusinessInfo): string {
+  const itemRows = lay.items.length > 0
+    ? lay.items.map(i => `<tr><td style="padding:6px 0;border-bottom:1px solid #eee">${i.product_name}</td><td style="text-align:center;padding:6px 0;border-bottom:1px solid #eee">${i.qty}</td><td style="text-align:right;padding:6px 0;border-bottom:1px solid #eee">KES ${(i.qty*i.unit_price).toFixed(0)}</td></tr>`).join('')
+    : `<tr><td colspan="3" style="padding:6px 0;border-bottom:1px solid #eee">${lay.description ?? 'Layaway Item'}</td></tr>`;
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <style>
+    body{font-family:Arial,sans-serif;max-width:300px;margin:0 auto;padding:16px;font-size:12px}
+    h2{text-align:center;font-size:15px;margin:4px 0}
+    .center{text-align:center} .divider{border-top:1px dashed #999;margin:8px 0}
+    table{width:100%;border-collapse:collapse}
+    .total-row td{font-weight:700;font-size:13px;padding:6px 0}
+    .balance-row td{font-weight:900;font-size:15px;color:#e53935;padding:6px 0}
+    .paid-row td{font-weight:700;color:#22c55e;padding:4px 0}
+  </style></head><body>
+  <h2>${biz.name.toUpperCase()}</h2>
+  ${biz.phone ? `<p class="center">${biz.phone}</p>` : ''}
+  ${biz.address ? `<p class="center">${biz.address}</p>` : ''}
+  <div class="divider"></div>
+  <p class="center"><b>LAYAWAY ${lay.eventLabel}</b></p>
+  <div class="divider"></div>
+  <p><b>Layaway #:</b> ${lay.layawayNo}</p>
+  <p><b>Date:</b> ${dayjs(lay.createdAt).format('D MMM YYYY HH:mm')}</p>
+  <p><b>Customer:</b> ${lay.customerName}</p>
+  ${lay.customerPhone ? `<p><b>Phone:</b> ${lay.customerPhone}</p>` : ''}
+  ${lay.cashierName ? `<p><b>Cashier:</b> ${lay.cashierName}</p>` : ''}
+  <div class="divider"></div>
+  <table>
+    <thead><tr><th style="text-align:left">Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Total</th></tr></thead>
+    <tbody>${itemRows}</tbody>
+  </table>
+  <div class="divider"></div>
+  <table>
+    <tr><td>Total Price</td><td style="text-align:right">KES ${lay.totalAmount.toFixed(0)}</td></tr>
+    <tr class="paid-row"><td>Amount Paid</td><td style="text-align:right">KES ${lay.depositPaid.toFixed(0)}</td></tr>
+    <tr class="balance-row"><td>Balance Due</td><td style="text-align:right">KES ${lay.balanceDue.toFixed(0)}</td></tr>
+    <tr><td>Payment</td><td style="text-align:right">${lay.paymentMethod}${lay.mpesaRef ? ` (${lay.mpesaRef})` : ''}</td></tr>
+  </table>
+  <div class="divider"></div>
+  ${lay.balanceDue <= 0
+    ? `<p class="center"><b>FULLY PAID — AWAITING COLLECTION</b></p>`
+    : `<p class="center">Balance of KES ${lay.balanceDue.toFixed(0)} due on next visit.</p>
+       ${biz.mpesaTill ? `<p class="center">M-Pesa Till: <b>${biz.mpesaTill}</b></p>` : ''}
+       ${biz.mpesaPaybill ? `<p class="center">Paybill: <b>${biz.mpesaPaybill}</b></p>` : ''}`
+  }
+  <div class="divider"></div>
+  <p class="center">${biz.receiptFooter ?? 'Thank you for your business!'}</p>
+  <p class="center" style="color:#999;font-size:10px">Powered by Nexora POS</p>
+  </body></html>`;
+}

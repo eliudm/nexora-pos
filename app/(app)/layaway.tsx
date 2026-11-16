@@ -5,11 +5,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { layawayQueries, Layaway, LayawayPayment } from '../../src/db/layaway';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import { layawayQueries, Layaway, LayawayPayment, LayawayItem } from '../../src/db/layaway';
 import { customerQueries, Customer } from '../../src/db/customers';
 import { getBusinessInfo } from '../../src/db/settings';
 import { printerService } from '../../src/services/printer';
-import { buildReceiptText, type ReceiptSale, type BusinessInfo } from '../../src/services/receipt';
+import { buildLayawayReceiptText, buildLayawayReceiptHtml, type LayawayReceiptData, type BusinessInfo } from '../../src/services/receipt';
 import { useSession } from '../../src/context/session';
 import { useTheme } from '../../src/context/theme';
 import dayjs from 'dayjs';
@@ -41,6 +43,8 @@ export default function LayawayScreen() {
 
   // Create form
   const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [description, setDescription] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
@@ -78,6 +82,8 @@ export default function LayawayScreen() {
 
   const resetCreateForm = () => {
     setCustomerName('');
+    setCustomerPhone('');
+    setCustomerEmail('');
     setSelectedCustomer(null);
     setDescription('');
     setTotalAmount('');
@@ -87,23 +93,59 @@ export default function LayawayScreen() {
   };
 
   const createMutation = useMutation({
-    mutationFn: () => layawayQueries.create({
-      customerId: selectedCustomer?.id,
-      customerName: customerName.trim(),
-      description: description.trim() || undefined,
-      totalAmount: parseFloat(totalAmount) || 0,
-      depositAmount: collectLater ? (parseFloat(totalAmount) || 0) : (parseFloat(depositAmount) || 0),
-      paymentMethod: createPayMethod,
-      mpesaRef: createMpesaRef.trim() || undefined,
-      cashierId: user?.id,
-      cashierName: user?.name,
-      collectLater,
-    }),
-    onSuccess: () => {
+    mutationFn: async () => {
+      // Save new customer if phone/email provided and not already linked
+      let custId = selectedCustomer?.id ?? null;
+      const phone = customerPhone.trim();
+      const email = customerEmail.trim();
+      if (!selectedCustomer && customerName.trim() && (phone || email)) {
+        custId = await customerQueries.create({
+          name: customerName.trim(),
+          phone: phone || null,
+          email: email || null,
+          credit_balance: 0,
+        });
+        qc.invalidateQueries({ queryKey: ['customers'] });
+      }
+      return layawayQueries.create({
+        customerId: custId,
+        customerName: customerName.trim(),
+        description: description.trim() || undefined,
+        totalAmount: parseFloat(totalAmount) || 0,
+        depositAmount: collectLater ? (parseFloat(totalAmount) || 0) : (parseFloat(depositAmount) || 0),
+        paymentMethod: createPayMethod,
+        mpesaRef: createMpesaRef.trim() || undefined,
+        cashierId: user?.id,
+        cashierName: user?.name,
+        collectLater,
+      });
+    },
+    onSuccess: async (layawayId) => {
       qc.invalidateQueries({ queryKey: ['layaways'] });
+      const dep = collectLater ? (parseFloat(totalAmount) || 0) : (parseFloat(depositAmount) || 0);
+      const tot = parseFloat(totalAmount) || 0;
       setCreateOpen(false);
       resetCreateForm();
       refetch();
+      // Print layaway receipt
+      if (bizInfo) {
+        const items = await layawayQueries.getItems(layawayId);
+        await printLayawayReceipt({
+          layawayNo: '', // will be filled from DB; use description as fallback
+          customerName: customerName.trim(),
+          customerPhone: customerPhone.trim() || null,
+          description: description.trim() || undefined,
+          items: items.map(i => ({ product_name: i.product_name, qty: i.qty, unit_price: i.unit_price })),
+          totalAmount: tot,
+          depositPaid: dep,
+          balanceDue: tot - dep,
+          paymentMethod: createPayMethod,
+          mpesaRef: createMpesaRef.trim() || null,
+          cashierName: user?.name ?? null,
+          createdAt: new Date().toISOString(),
+          eventLabel: collectLater ? 'RESERVED' : 'CREATED',
+        }, bizInfo);
+      }
     },
   });
 
@@ -121,12 +163,34 @@ export default function LayawayScreen() {
       const updated = await layawayQueries.getById(detailLayaway!.id);
       setDetailLayaway(updated);
       setPaymentOpen(false);
+      const paidNow = parseFloat(payAmount) || 0;
+      const usedMethod = payMethod;
+      const usedRef = payMpesaRef.trim() || null;
       setPayAmount('');
       setPayMpesaRef('');
       refetch();
       if (updated && updated.balance_due <= 0) {
         setCompletedLayaway(updated);
         setCompletionOpen(true);
+      }
+      // Print payment receipt
+      if (updated && bizInfo) {
+        const items = await layawayQueries.getItems(updated.id);
+        await printLayawayReceipt({
+          layawayNo: updated.layaway_no,
+          customerName: updated.customer_name ?? '',
+          customerPhone: null,
+          description: updated.description,
+          items: items.map(i => ({ product_name: i.product_name, qty: i.qty, unit_price: i.unit_price })),
+          totalAmount: updated.total_amount,
+          depositPaid: updated.deposit_paid,
+          balanceDue: updated.balance_due,
+          paymentMethod: usedMethod,
+          mpesaRef: usedRef,
+          cashierName: user?.name ?? null,
+          createdAt: new Date().toISOString(),
+          eventLabel: 'PAYMENT RECEIVED',
+        }, bizInfo);
       }
     },
   });
@@ -183,30 +247,46 @@ export default function LayawayScreen() {
       setCompletionOpen(false);
       setDetailLayaway(null);
       refetch();
-      // Auto-print if printer configured; otherwise offer share quietly after close
-      const config = await printerService.getConfig();
-      if (config.type !== 'none') {
-        const receiptSale: ReceiptSale = {
-          invoice_no: result.invoiceNo,
-          created_at: new Date().toISOString(),
-          customer_name: result.customerName,
-          cashier_name: user?.name,
-          subtotal: result.total,
-          tax_amount: 0,
-          discount: 0,
-          total: result.total,
-          payment_method: result.paymentMethod,
-          mpesa_ref: result.mpesaRef,
-          items: [{ product_name: result.description ?? 'Layaway Item', qty: 1, unit_price: result.total, vat_rate: 0, total: result.total }],
-        };
-        const bizData: BusinessInfo = { name: bizInfo.name ?? '', phone: bizInfo.phone, address: bizInfo.address, vatNo: bizInfo.vatNo, receiptFooter: bizInfo.receiptFooter, mpesaPaybill: bizInfo.mpesaPaybill, mpesaTill: bizInfo.mpesaTill };
-        await printerService.print(buildReceiptText(receiptSale, bizData));
-      }
+      // Print collected receipt
+      const items = await layawayQueries.getItems(target.id);
+      await printLayawayReceipt({
+        layawayNo: target.layaway_no,
+        customerName: target.customer_name ?? '',
+        customerPhone: null,
+        description: target.description,
+        items: items.map(i => ({ product_name: i.product_name, qty: i.qty, unit_price: i.unit_price })),
+        totalAmount: target.total_amount,
+        depositPaid: target.total_amount,
+        balanceDue: 0,
+        paymentMethod: result.paymentMethod,
+        mpesaRef: result.mpesaRef,
+        cashierName: user?.name ?? null,
+        createdAt: new Date().toISOString(),
+        eventLabel: 'COLLECTED',
+      }, bizInfo);
     } catch (e: any) {
       Alert.alert('Error', e.message ?? 'Could not post sale.');
     } finally {
       setPostingSale(false);
     }
+  };
+
+  const printLayawayReceipt = async (data: LayawayReceiptData, biz: NonNullable<typeof bizInfo>) => {
+    const bizData: BusinessInfo = { name: biz.name ?? '', phone: biz.phone, address: biz.address, vatNo: biz.vatNo, receiptFooter: biz.receiptFooter, mpesaPaybill: biz.mpesaPaybill, mpesaTill: biz.mpesaTill };
+    const config = await printerService.getConfig();
+    if (config.type !== 'none') {
+      await printerService.print(buildLayawayReceiptText(data, bizData));
+      return;
+    }
+    // No printer — offer to share PDF
+    Alert.alert('Layaway Receipt', 'Share receipt with customer?', [
+      { text: 'Share PDF', onPress: async () => {
+        const html = buildLayawayReceiptHtml(data, bizData);
+        const { uri } = await Print.printToFileAsync({ html });
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Share Layaway Receipt' });
+      }},
+      { text: 'Skip' },
+    ]);
   };
 
   const fmt = (n: number) => `KES ${n.toLocaleString('en-KE', { maximumFractionDigits: 0 })}`;
@@ -289,7 +369,7 @@ export default function LayawayScreen() {
                 />
                 {selectedCustomer && (
                   <Text style={{ fontSize: 11, color: C.accent, marginTop: -4, marginBottom: 4, marginLeft: 2 }}>
-                    Linked to existing customer
+                    Linked to existing customer · {selectedCustomer.phone ?? 'no phone'}
                   </Text>
                 )}
                 {!selectedCustomer && customerName.length > 0 && (customers ?? []).length > 0 && (
@@ -308,6 +388,20 @@ export default function LayawayScreen() {
                   </View>
                 )}
               </View>
+
+              {/* Phone & email — shown for new customers only */}
+              {!selectedCustomer && (
+                <>
+                  <TextInput label="Phone Number" value={customerPhone} onChangeText={setCustomerPhone} mode="outlined" style={styles.input} keyboardType="phone-pad" placeholder="e.g. 0712 345 678" />
+                  <TextInput label="Email (optional)" value={customerEmail} onChangeText={setCustomerEmail} mode="outlined" style={styles.input} keyboardType="email-address" autoCapitalize="none" />
+                  {(customerPhone.trim() || customerEmail.trim()) && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <MaterialCommunityIcons name="account-plus-outline" size={14} color={C.accent} />
+                      <Text style={{ fontSize: 11, color: C.accent }}>Customer will be saved to your contacts</Text>
+                    </View>
+                  )}
+                </>
+              )}
 
               <TextInput label="Description / Items" value={description} onChangeText={setDescription} mode="outlined" style={styles.input} />
               <TextInput label="Total Amount (KES) *" value={totalAmount} onChangeText={setTotalAmount} mode="outlined" keyboardType="decimal-pad" style={styles.input} />
