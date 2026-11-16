@@ -94,7 +94,7 @@ export default function SuppliersScreen() {
                 {item.email && <Text style={styles.detail}>{item.email}</Text>}
                 {item.address && <Text style={styles.detail} numberOfLines={1}>{item.address}</Text>}
               </View>
-              <Button compact icon="delete" textColor="#e53935" onPress={() => confirmDelete(item)} />
+              <Button compact icon="delete" textColor="#e53935" onPress={() => confirmDelete(item)}>{'  '}</Button>
             </Card.Content>
           </Card>
         )}

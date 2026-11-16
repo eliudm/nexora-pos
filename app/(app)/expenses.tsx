@@ -119,7 +119,7 @@ export default function ExpensesScreen() {
               </View>
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={styles.expAmount}>KES {item.amount.toLocaleString()}</Text>
-                <Button compact icon="delete" textColor="#e53935" onPress={() => Alert.alert('Delete?', 'Remove this expense?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => deleteMutation.mutate(item.id) }])} />
+                <Button compact icon="delete" textColor="#e53935" onPress={() => Alert.alert('Delete?', 'Remove this expense?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => deleteMutation.mutate(item.id) }])}>{'  '}</Button>
               </View>
             </Card.Content>
           </Card>
