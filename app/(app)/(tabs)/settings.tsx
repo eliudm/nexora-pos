@@ -4,7 +4,7 @@ import { Text, Appbar, Card, TextInput, Button, Divider, List, Portal, Dialog, D
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { getBusinessInfo, setSetting, getSetting } from '../../../src/db/settings';
