@@ -5,13 +5,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import { layawayQueries, Layaway, LayawayPayment } from '../../src/db/layaway';
 import { customerQueries, Customer } from '../../src/db/customers';
 import { getBusinessInfo } from '../../src/db/settings';
 import { printerService } from '../../src/services/printer';
-import { buildReceiptText, buildReceiptHtml, type ReceiptSale, type BusinessInfo } from '../../src/services/receipt';
+import { buildReceiptText, type ReceiptSale, type BusinessInfo } from '../../src/services/receipt';
 import { useSession } from '../../src/context/session';
 import { useTheme } from '../../src/context/theme';
 import dayjs from 'dayjs';
@@ -43,8 +41,6 @@ export default function LayawayScreen() {
 
   // Create form
   const [customerName, setCustomerName] = useState('');
-  const [customerSearch, setCustomerSearch] = useState('');
-  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [description, setDescription] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
@@ -70,9 +66,9 @@ export default function LayawayScreen() {
   });
 
   const { data: customers } = useQuery({
-    queryKey: ['customers-layaway', customerSearch],
-    queryFn: () => customerQueries.getAll(customerSearch),
-    enabled: customerPickerOpen,
+    queryKey: ['customers-layaway', customerName],
+    queryFn: () => customerQueries.getAll(customerName),
+    enabled: createOpen && customerName.length > 0 && !selectedCustomer,
   });
 
   const { data: bizInfo } = useQuery({
@@ -183,51 +179,34 @@ export default function LayawayScreen() {
       const result = await layawayQueries.postAsSale(target.id, user?.id ?? null);
       qc.invalidateQueries({ queryKey: ['layaways'] });
       qc.invalidateQueries({ queryKey: ['daily-summary'] });
+      // Close all dialogs first, then handle receipt non-blockingly
       setCompletionOpen(false);
       setDetailLayaway(null);
       refetch();
-      await printLayawayReceipt(result, bizInfo);
+      // Auto-print if printer configured; otherwise offer share quietly after close
+      const config = await printerService.getConfig();
+      if (config.type !== 'none') {
+        const receiptSale: ReceiptSale = {
+          invoice_no: result.invoiceNo,
+          created_at: new Date().toISOString(),
+          customer_name: result.customerName,
+          cashier_name: user?.name,
+          subtotal: result.total,
+          tax_amount: 0,
+          discount: 0,
+          total: result.total,
+          payment_method: result.paymentMethod,
+          mpesa_ref: result.mpesaRef,
+          items: [{ product_name: result.description ?? 'Layaway Item', qty: 1, unit_price: result.total, vat_rate: 0, total: result.total }],
+        };
+        const bizData: BusinessInfo = { name: bizInfo.name ?? '', phone: bizInfo.phone, address: bizInfo.address, vatNo: bizInfo.vatNo, receiptFooter: bizInfo.receiptFooter, mpesaPaybill: bizInfo.mpesaPaybill, mpesaTill: bizInfo.mpesaTill };
+        await printerService.print(buildReceiptText(receiptSale, bizData));
+      }
     } catch (e: any) {
       Alert.alert('Error', e.message ?? 'Could not post sale.');
     } finally {
       setPostingSale(false);
     }
-  };
-
-  const printLayawayReceipt = async (data: { invoiceNo: string; paymentMethod: string; mpesaRef: string | null; total: number; customerName: string | null; description: string | null }, biz: NonNullable<typeof bizInfo>) => {
-    const receiptSale: ReceiptSale = {
-      invoice_no: data.invoiceNo,
-      created_at: new Date().toISOString(),
-      customer_name: data.customerName,
-      cashier_name: user?.name,
-      subtotal: data.total,
-      tax_amount: 0,
-      discount: 0,
-      total: data.total,
-      payment_method: data.paymentMethod,
-      mpesa_ref: data.mpesaRef,
-      items: [{ product_name: data.description ?? 'Layaway Item', qty: 1, unit_price: data.total, vat_rate: 0, total: data.total }],
-    };
-    const bizData: BusinessInfo = {
-      name: biz.name ?? '',
-      phone: biz.phone,
-      address: biz.address,
-      vatNo: biz.vatNo,
-      receiptFooter: biz.receiptFooter,
-      mpesaPaybill: biz.mpesaPaybill,
-      mpesaTill: biz.mpesaTill,
-    };
-    const config = await printerService.getConfig();
-    if (config.type !== 'none') {
-      const text = buildReceiptText(receiptSale, bizData);
-      const res = await printerService.print(text);
-      if (res.success) return;
-    }
-    Alert.alert('Receipt', 'Print or share receipt:', [
-      { text: 'Print', onPress: async () => { const html = buildReceiptHtml(receiptSale, bizData); await Print.printAsync({ html }); } },
-      { text: 'Share PDF', onPress: async () => { const html = buildReceiptHtml(receiptSale, bizData); const { uri } = await Print.printToFileAsync({ html }); await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Share Receipt' }); } },
-      { text: 'Skip' },
-    ]);
   };
 
   const fmt = (n: number) => `KES ${n.toLocaleString('en-KE', { maximumFractionDigits: 0 })}`;
@@ -297,24 +276,38 @@ export default function LayawayScreen() {
           <Dialog.ScrollArea style={{ maxHeight: 580 }}>
             <Dialog.Title>New Layaway</Dialog.Title>
             <View style={{ padding: 16 }}>
-              <TextInput
-                label="Customer Name *"
-                value={customerName}
-                onChangeText={setCustomerName}
-                mode="outlined"
-                style={styles.input}
-                placeholder="Enter customer name"
-              />
-              <Button
-                mode="text"
-                icon="account-search"
-                compact
-                onPress={() => setCustomerPickerOpen(true)}
-                style={{ alignSelf: 'flex-start', marginTop: -4, marginBottom: 8 }}
-                textColor={C.accent}
-              >
-                {selectedCustomer ? `Linked: ${selectedCustomer.name}` : 'Link to existing customer'}
-              </Button>
+              {/* Customer autocomplete */}
+              <View style={{ marginBottom: 8 }}>
+                <TextInput
+                  label="Customer Name *"
+                  value={customerName}
+                  onChangeText={(t) => { setCustomerName(t); setSelectedCustomer(null); }}
+                  mode="outlined"
+                  style={styles.input}
+                  placeholder="Type to search existing customers…"
+                  right={selectedCustomer ? <TextInput.Icon icon="account-check" color={C.accent} /> : undefined}
+                />
+                {selectedCustomer && (
+                  <Text style={{ fontSize: 11, color: C.accent, marginTop: -4, marginBottom: 4, marginLeft: 2 }}>
+                    Linked to existing customer
+                  </Text>
+                )}
+                {!selectedCustomer && customerName.length > 0 && (customers ?? []).length > 0 && (
+                  <View style={[styles.autocompleteBox, { backgroundColor: C.surface, borderColor: C.border }]}>
+                    {(customers ?? []).slice(0, 5).map((c) => (
+                      <View key={c.id}>
+                        <Text
+                          onPress={() => { setSelectedCustomer(c); setCustomerName(c.name); }}
+                          style={{ paddingVertical: 10, paddingHorizontal: 12, fontSize: 14, color: C.text }}
+                        >
+                          {c.name}{c.phone ? ` · ${c.phone}` : ''}
+                        </Text>
+                        <Divider />
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
 
               <TextInput label="Description / Items" value={description} onChangeText={setDescription} mode="outlined" style={styles.input} />
               <TextInput label="Total Amount (KES) *" value={totalAmount} onChangeText={setTotalAmount} mode="outlined" keyboardType="decimal-pad" style={styles.input} />
@@ -366,25 +359,6 @@ export default function LayawayScreen() {
           </Dialog.Actions>
         </Dialog>
 
-        {/* ── Customer Picker ── */}
-        <Dialog visible={customerPickerOpen} onDismiss={() => setCustomerPickerOpen(false)}>
-          <Dialog.Title>Select Customer</Dialog.Title>
-          <Dialog.Content>
-            <TextInput label="Search" value={customerSearch} onChangeText={setCustomerSearch} mode="outlined" dense />
-            {(customers ?? []).slice(0, 6).map((c) => (
-              <View key={c.id}>
-                <Text
-                  onPress={() => { setSelectedCustomer(c); setCustomerName(c.name); setCustomerPickerOpen(false); }}
-                  style={{ paddingVertical: 10, fontSize: 14, color: C.text }}
-                >
-                  {c.name}{c.phone ? ` · ${c.phone}` : ''}
-                </Text>
-                <Divider />
-              </View>
-            ))}
-          </Dialog.Content>
-          <Dialog.Actions><Button onPress={() => setCustomerPickerOpen(false)}>Close</Button></Dialog.Actions>
-        </Dialog>
 
         {/* ── Detail Dialog ── */}
         <Dialog visible={!!detailLayaway} onDismiss={() => setDetailLayaway(null)}>
@@ -547,5 +521,6 @@ function makeStyles(C: ReturnType<typeof useTheme>['colors']) {
     toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 10, borderWidth: 1, padding: 12, marginBottom: 12 },
     collectNote: { flexDirection: 'row', alignItems: 'flex-start', borderRadius: 8, borderWidth: 1, padding: 10, marginTop: 4 },
     reservedBanner: { flexDirection: 'row', alignItems: 'center', borderRadius: 8, borderWidth: 1, padding: 8, marginTop: 8 },
+    autocompleteBox: { borderWidth: 1, borderRadius: 8, marginTop: -6, marginBottom: 8, overflow: 'hidden' },
   });
 }
