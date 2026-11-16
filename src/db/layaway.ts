@@ -91,7 +91,7 @@ export const layawayQueries = {
         );
         if (item.product_id) {
           await db.runAsync(
-            'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?',
+            'UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?',
             [item.qty, item.product_id],
           );
         }
@@ -163,7 +163,7 @@ export const layawayQueries = {
     for (const item of items) {
       if (item.product_id) {
         await db.runAsync(
-          'UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?',
+          'UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?',
           [item.qty, item.product_id],
         );
       }
