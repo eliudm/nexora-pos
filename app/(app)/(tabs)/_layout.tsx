@@ -9,8 +9,8 @@ import { getSetting } from '../../../src/db/settings';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
-function TabIcon({ name, color, size }: { name: IconName; color: string; size: number }) {
-  return <MaterialCommunityIcons name={name} color={color} size={size} />;
+function TabIcon({ name, color, size }: { name: IconName; color: string | any; size: number }) {
+  return <MaterialCommunityIcons name={name} color={color as string} size={size} />;
 }
 
 function TrialBanner({ daysLeft, colors }: { daysLeft: number; colors: any }) {
