@@ -1542,7 +1542,18 @@ export default function POSScreen() {
             {selectedCustomer && (
               <View style={[styles.checkoutCustomer, { backgroundColor: D.elevated, borderColor: D.border }]}>
                 <Text style={{ color: D.text, fontSize: 12, fontWeight: '600' }}>{selectedCustomer.name}</Text>
-                <Text style={{ color: D.muted, fontSize: 11 }}>Balance: KES {selectedCustomer.credit_balance.toLocaleString()} · {loyaltyBalance} pts</Text>
+                <Text style={{ color: D.muted, fontSize: 11 }}>
+                  Credit balance: KES {selectedCustomer.credit_balance.toLocaleString()} · {loyaltyBalance} pts
+                  {(selectedCustomer.credit_limit ?? 0) > 0 && ` · Limit: KES ${selectedCustomer.credit_limit.toLocaleString('en-KE')}`}
+                </Text>
+                {payMethod === 'CREDIT' && (
+                  <Text style={{ fontSize: 11, fontWeight: '700', marginTop: 2, color: (selectedCustomer.credit_limit ?? 0) > 0 && Math.abs(selectedCustomer.credit_balance) + total > selectedCustomer.credit_limit ? '#e53935' : '#22c55e' }}>
+                    {(selectedCustomer.credit_limit ?? 0) > 0
+                      ? `Available credit: KES ${Math.max(0, selectedCustomer.credit_limit + selectedCustomer.credit_balance).toLocaleString('en-KE')}`
+                      : `Will owe: KES ${(Math.abs(selectedCustomer.credit_balance) + total).toLocaleString('en-KE', { maximumFractionDigits: 2 })}`
+                    }
+                  </Text>
+                )}
               </View>
             )}
             <Text style={{ marginBottom: 8, fontWeight: '600', color: D.muted, fontSize: 12, marginTop: 4 }}>PAYMENT METHOD</Text>
