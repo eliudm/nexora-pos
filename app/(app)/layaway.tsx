@@ -175,9 +175,11 @@ export default function LayawayScreen() {
       if (updated && updated.balance_due <= 0) {
         setCompletedLayaway(updated);
         setCompletionOpen(true);
-      }
-      // Print payment receipt
-      if (updated && bizInfo) {
+        // Receipt is handled by handlePostAsSale (collect now) or the
+        // "Will Collect Later" button — don't print here or the Alert
+        // collides with the completion dialog.
+      } else if (updated && bizInfo) {
+        // Partial payment only — print a progress receipt
         const items = await layawayQueries.getItems(updated.id);
         await printLayawayReceipt({
           layawayNo: updated.layaway_no,
@@ -585,7 +587,30 @@ export default function LayawayScreen() {
             <Button mode="contained" buttonColor={C.accent} icon="package-variant-closed-check" loading={postingSale} onPress={() => handlePostAsSale()} style={{ width: '100%', borderRadius: 10 }}>
               Yes — Collecting Now
             </Button>
-            <Button mode="outlined" onPress={() => { setCompletionOpen(false); setDetailLayaway(null); refetch(); }} style={{ width: '100%', borderRadius: 10 }}>
+            <Button mode="outlined" onPress={async () => {
+              setCompletionOpen(false);
+              setDetailLayaway(null);
+              refetch();
+              // Print fully paid receipt now that dialog is dismissed
+              if (completedLayaway && bizInfo) {
+                const items = await layawayQueries.getItems(completedLayaway.id);
+                await printLayawayReceipt({
+                  layawayNo: completedLayaway.layaway_no,
+                  customerName: completedLayaway.customer_name ?? '',
+                  customerPhone: null,
+                  description: completedLayaway.description,
+                  items: items.map(i => ({ product_name: i.product_name, qty: i.qty, unit_price: i.unit_price })),
+                  totalAmount: completedLayaway.total_amount,
+                  depositPaid: completedLayaway.total_amount,
+                  balanceDue: 0,
+                  paymentMethod: 'CASH',
+                  mpesaRef: null,
+                  cashierName: user?.name ?? null,
+                  createdAt: new Date().toISOString(),
+                  eventLabel: 'FULLY PAID',
+                }, bizInfo);
+              }
+            }} style={{ width: '100%', borderRadius: 10 }}>
               No — Will Collect Later
             </Button>
           </Dialog.Actions>
