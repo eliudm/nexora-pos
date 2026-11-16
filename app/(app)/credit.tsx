@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, FlatList, Alert, ScrollView, Pressable, RefreshControl } from 'react-native';
+import { View, StyleSheet, FlatList, Alert, ScrollView, Pressable, RefreshControl, TextInput as RNTextInput } from 'react-native';
 import { Text, Button, Appbar, Portal, Dialog, TextInput, Chip, ActivityIndicator, RadioButton, Divider, DataTable } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -37,6 +37,7 @@ export default function CreditScreen() {
 
   const [invoiceVisible, setInvoiceVisible] = useState(false);
   const [selectedInvoiceNo, setSelectedInvoiceNo] = useState<string | null>(null);
+  const [debtorSearch, setDebtorSearch] = useState('');
 
   const { data: summary, refetch: refetchSummary } = useQuery({
     queryKey: ['credit-summary'],
@@ -166,16 +167,37 @@ export default function CreditScreen() {
       {tab === 'debtors' && (
         loadingDebtors
           ? <ActivityIndicator style={{ marginTop: 48 }} />
-          : debtors.length === 0
-            ? (
-              <View style={S.empty}>
-                <MaterialCommunityIcons name="check-circle-outline" size={56} color={C.muted} />
-                <Text style={[S.emptyText, { color: C.muted }]}>No outstanding credit balances</Text>
-              </View>
-            )
-            : (
+          : (
+            <>
+              {debtors.length > 0 && (
+                <View style={[S.searchBar, { backgroundColor: C.elevated, borderColor: C.border }]}>
+                  <MaterialCommunityIcons name="magnify" size={18} color={C.muted} />
+                  <RNTextInput
+                    value={debtorSearch}
+                    onChangeText={setDebtorSearch}
+                    placeholder="Search debtors..."
+                    placeholderTextColor={C.muted}
+                    style={[S.searchInput, { color: C.text }]}
+                  />
+                  {debtorSearch.length > 0 && (
+                    <Pressable onPress={() => setDebtorSearch('')}>
+                      <MaterialCommunityIcons name="close-circle" size={16} color={C.muted} />
+                    </Pressable>
+                  )}
+                </View>
+              )}
+              {debtors.filter(d => d.name.toLowerCase().includes(debtorSearch.toLowerCase()) || (d.phone ?? '').includes(debtorSearch)).length === 0
+                ? (
+                  <View style={S.empty}>
+                    <MaterialCommunityIcons name="check-circle-outline" size={56} color={C.muted} />
+                    <Text style={[S.emptyText, { color: C.muted }]}>
+                      {debtors.length === 0 ? 'No outstanding credit balances' : 'No debtors match your search'}
+                    </Text>
+                  </View>
+                )
+                : (
               <FlatList
-                data={debtors}
+                data={debtors.filter(d => d.name.toLowerCase().includes(debtorSearch.toLowerCase()) || (d.phone ?? '').includes(debtorSearch))}
                 keyExtractor={d => String(d.id)}
                 contentContainerStyle={{ padding: 16, gap: 10 }}
                 refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} colors={[C.accent]} />}
@@ -241,7 +263,9 @@ export default function CreditScreen() {
                   );
                 }}
               />
-            )
+                )}
+            </>
+          )
       )}
 
       {tab === 'aging' && (
@@ -640,5 +664,7 @@ function makeStyles(C: any) {
     detailPhone: { fontSize: 13, marginBottom: 10 },
     empty: { alignItems: 'center', paddingTop: 60, gap: 12 },
     emptyText: { fontSize: 15, fontWeight: '600' },
+    searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 4, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
+    searchInput: { flex: 1, fontSize: 14 },
   });
 }
