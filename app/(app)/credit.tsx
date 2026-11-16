@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, FlatList, Alert, ScrollView, Pressable } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, FlatList, Alert, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { Text, Button, Appbar, Portal, Dialog, TextInput, Chip, ActivityIndicator, RadioButton, Divider, DataTable } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -38,12 +38,12 @@ export default function CreditScreen() {
   const [invoiceVisible, setInvoiceVisible] = useState(false);
   const [selectedInvoiceNo, setSelectedInvoiceNo] = useState<string | null>(null);
 
-  const { data: summary } = useQuery({
+  const { data: summary, refetch: refetchSummary } = useQuery({
     queryKey: ['credit-summary'],
     queryFn: creditQueries.getSummary,
   });
 
-  const { data: debtors = [], isLoading: loadingDebtors } = useQuery({
+  const { data: debtors = [], isLoading: loadingDebtors, refetch: refetchDebtors, isRefetching } = useQuery({
     queryKey: ['credit-debtors'],
     queryFn: creditQueries.getDebtors,
   });
@@ -119,6 +119,8 @@ export default function CreditScreen() {
     setDetailVisible(true);
   };
 
+  const onRefresh = useCallback(() => { refetchDebtors(); refetchSummary(); }, [refetchDebtors, refetchSummary]);
+
   const owed = Math.abs(selectedDebtor?.credit_balance ?? 0);
   const overage = selectedDebtor && selectedDebtor.credit_limit > 0
     ? Math.max(0, Math.abs(selectedDebtor.credit_balance) - selectedDebtor.credit_limit)
@@ -176,6 +178,7 @@ export default function CreditScreen() {
                 data={debtors}
                 keyExtractor={d => String(d.id)}
                 contentContainerStyle={{ padding: 16, gap: 10 }}
+                refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} colors={[C.accent]} />}
                 renderItem={({ item }) => {
                   const owedAmt = Math.abs(item.credit_balance);
                   const isOverLimit = item.credit_limit > 0 && owedAmt > item.credit_limit;
