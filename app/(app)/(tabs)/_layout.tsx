@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Tabs, router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../../src/context/theme';
 import { subscriptionService, TRIAL_DAYS } from '../../../src/services/subscription';
@@ -18,10 +19,11 @@ function TrialBanner({ daysLeft, colors }: { daysLeft: number; colors: any }) {
   const bg = urgent ? '#ef444422' : '#f59e0b18';
   const fg = urgent ? '#ef4444' : '#d97706';
   const icon: IconName = urgent ? 'alert-circle-outline' : 'clock-outline';
+  const { top } = useSafeAreaInsets();
 
   return (
     <Pressable
-      style={[styles.banner, { backgroundColor: bg, borderBottomColor: fg + '44' }]}
+      style={[styles.banner, { backgroundColor: bg, borderBottomColor: fg + '44', paddingTop: top + 7 }]}
       onPress={() => router.push('/(app)/subscription')}
     >
       <MaterialCommunityIcons name={icon} size={14} color={fg} />
