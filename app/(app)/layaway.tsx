@@ -25,7 +25,7 @@ const STATUS_COLOR: Record<string, string> = {
 
 const STATUS_LABEL: Record<string, string> = {
   OPEN: 'IN PROGRESS',
-  RESERVED: 'PAID · COLLECT',
+  RESERVED: 'PAID · AWAITING COLLECTION',
   COMPLETED: 'COLLECTED',
   CANCELLED: 'CANCELLED',
 };
@@ -493,9 +493,9 @@ export default function LayawayScreen() {
           </Dialog.Actions>
         </Dialog>
 
-        {/* ── Completion / Post-as-Sale Dialog ── */}
+        {/* ── Fully Paid: Collect Now or Later? ── */}
         <Dialog visible={completionOpen} onDismiss={() => setCompletionOpen(false)}>
-          <Dialog.Title>Payment Complete!</Dialog.Title>
+          <Dialog.Title>Fully Paid!</Dialog.Title>
           <Dialog.Content>
             <View style={{ alignItems: 'center', paddingVertical: 8 }}>
               <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#22c55e22', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
@@ -505,16 +505,16 @@ export default function LayawayScreen() {
                 {completedLayaway?.layaway_no} is fully paid
               </Text>
               <Text style={{ fontSize: 13, color: C.muted, textAlign: 'center', marginTop: 6, lineHeight: 20 }}>
-                Post as a completed sale to record revenue and print a receipt.
+                Is the customer collecting the item now?
               </Text>
             </View>
           </Dialog.Content>
           <Dialog.Actions style={{ flexDirection: 'column', gap: 8, paddingHorizontal: 16, paddingBottom: 12 }}>
-            <Button mode="contained" buttonColor={C.accent} icon="receipt" loading={postingSale} onPress={() => handlePostAsSale()} style={{ width: '100%', borderRadius: 10 }}>
-              Post as Sale &amp; Print Receipt
+            <Button mode="contained" buttonColor={C.accent} icon="package-variant-closed-check" loading={postingSale} onPress={() => handlePostAsSale()} style={{ width: '100%', borderRadius: 10 }}>
+              Yes — Collecting Now
             </Button>
-            <Button onPress={() => { setCompletionOpen(false); setDetailLayaway(null); refetch(); }} style={{ width: '100%' }} textColor={C.muted}>
-              Close Without Posting
+            <Button mode="outlined" onPress={() => { setCompletionOpen(false); setDetailLayaway(null); refetch(); }} style={{ width: '100%', borderRadius: 10 }}>
+              No — Will Collect Later
             </Button>
           </Dialog.Actions>
         </Dialog>

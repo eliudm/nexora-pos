@@ -26,10 +26,19 @@ export interface LayawayPayment {
   created_at: string;
 }
 
+export interface LayawayItem {
+  id: number;
+  layaway_id: number;
+  product_id: number | null;
+  product_name: string;
+  qty: number;
+  unit_price: number;
+}
+
 export const layawayQueries = {
   create: async (data: {
     customerId?: number | null;
-    customerName: string;           // required
+    customerName: string;
     description?: string | null;
     totalAmount: number;
     depositAmount: number;
@@ -37,7 +46,8 @@ export const layawayQueries = {
     mpesaRef?: string;
     cashierId?: number | null;
     cashierName?: string | null;
-    collectLater?: boolean;         // pay in full now, collect later → RESERVED
+    collectLater?: boolean;
+    items?: Array<{ product_id: number | null; product_name: string; qty: number; unit_price: number }>;
   }): Promise<number> => {
     const db = await getDb();
     const date = new Date();
@@ -48,9 +58,9 @@ export const layawayQueries = {
     const seq = String((existing?.c ?? 0) + 1).padStart(4, '0');
     const layawayNo = `LAY-${dateStr}-${seq}`;
 
-    // RESERVED = paid in full upfront, waiting for collection
     const depositAmount = data.collectLater ? data.totalAmount : data.depositAmount;
     const balanceDue = data.totalAmount - depositAmount;
+    // RESERVED = paid in full upfront, waiting for collection
     const status = data.collectLater ? 'RESERVED' : 'OPEN';
 
     const r = await db.runAsync(
@@ -70,6 +80,24 @@ export const layawayQueries = {
          data.cashierId ?? null, data.cashierName ?? null],
       );
     }
+
+    // Store items and deduct stock
+    if (data.items && data.items.length > 0) {
+      for (const item of data.items) {
+        await db.runAsync(
+          `INSERT INTO layaway_items (layaway_id, product_id, product_name, qty, unit_price)
+           VALUES (?, ?, ?, ?, ?)`,
+          [layawayId, item.product_id ?? null, item.product_name, item.qty, item.unit_price],
+        );
+        if (item.product_id) {
+          await db.runAsync(
+            'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?',
+            [item.qty, item.product_id],
+          );
+        }
+      }
+    }
+
     return layawayId;
   },
 
@@ -87,11 +115,12 @@ export const layawayQueries = {
       [layawayId, data.amount, data.paymentMethod ?? 'CASH', data.mpesaRef ?? null,
        data.cashierId ?? null, data.cashierName ?? null],
     );
+    // When fully paid, move to RESERVED (waiting for collection) not COMPLETED
     await db.runAsync(
       `UPDATE layaways
        SET deposit_paid = deposit_paid + ?,
            balance_due  = balance_due  - ?,
-           status = CASE WHEN balance_due - ? <= 0 THEN 'COMPLETED' ELSE 'OPEN' END
+           status = CASE WHEN balance_due - ? <= 0 THEN 'RESERVED' ELSE 'OPEN' END
        WHERE id = ?`,
       [data.amount, data.amount, data.amount, layawayId],
     );
@@ -117,12 +146,31 @@ export const layawayQueries = {
     );
   },
 
+  getItems: async (layawayId: number): Promise<LayawayItem[]> => {
+    const db = await getDb();
+    return db.getAllAsync<LayawayItem>(
+      'SELECT * FROM layaway_items WHERE layaway_id = ? ORDER BY id',
+      [layawayId],
+    );
+  },
+
   cancel: async (id: number): Promise<void> => {
     const db = await getDb();
+    // Restore stock before cancelling
+    const items = await db.getAllAsync<{ product_id: number | null; qty: number }>(
+      'SELECT product_id, qty FROM layaway_items WHERE layaway_id = ?', [id],
+    );
+    for (const item of items) {
+      if (item.product_id) {
+        await db.runAsync(
+          'UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?',
+          [item.qty, item.product_id],
+        );
+      }
+    }
     await db.runAsync("UPDATE layaways SET status = 'CANCELLED' WHERE id = ?", [id]);
   },
 
-  // Used for RESERVED items when customer comes to collect, and for COMPLETED layaways.
   postAsSale: async (layawayId: number, cashierId?: number | null): Promise<{
     invoiceNo: string;
     paymentMethod: string;
@@ -159,11 +207,25 @@ export const layawayQueries = {
     );
     const saleId = result.lastInsertRowId;
 
-    await db.runAsync(
-      `INSERT INTO sale_items (sale_id, product_id, product_name, qty, unit_price, cost_price, discount, vat_rate, vat_amount, total)
-       VALUES (?, NULL, ?, 1, ?, 0, 0, 0, 0, ?)`,
-      [saleId, layaway.description ?? 'Layaway Item', layaway.total_amount, layaway.total_amount],
+    // Use stored items if available, otherwise fall back to a single description line
+    const items = await db.getAllAsync<LayawayItem>(
+      'SELECT * FROM layaway_items WHERE layaway_id = ? ORDER BY id', [layawayId],
     );
+    if (items.length > 0) {
+      for (const item of items) {
+        await db.runAsync(
+          `INSERT INTO sale_items (sale_id, product_id, product_name, qty, unit_price, cost_price, discount, vat_rate, vat_amount, total)
+           VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, ?)`,
+          [saleId, item.product_id ?? null, item.product_name, item.qty, item.unit_price, item.qty * item.unit_price],
+        );
+      }
+    } else {
+      await db.runAsync(
+        `INSERT INTO sale_items (sale_id, product_id, product_name, qty, unit_price, cost_price, discount, vat_rate, vat_amount, total)
+         VALUES (?, NULL, ?, 1, ?, 0, 0, 0, 0, ?)`,
+        [saleId, layaway.description ?? 'Layaway Item', layaway.total_amount, layaway.total_amount],
+      );
+    }
 
     await db.runAsync("UPDATE layaways SET status = 'COMPLETED' WHERE id = ?", [layawayId]);
 

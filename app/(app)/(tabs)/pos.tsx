@@ -210,6 +210,12 @@ export default function POSScreen() {
       cashierId: user?.id,
       cashierName: user?.name,
       collectLater: layCollectLater,
+      items: cart.map(i => ({
+        product_id: i.product_id ?? null,
+        product_name: i.product_name,
+        qty: i.qty,
+        unit_price: i.unit_price,
+      })),
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['layaways'] });

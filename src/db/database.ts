@@ -366,6 +366,17 @@ async function migrate(db: SQLite.SQLiteDatabase) {
     );
   `);
 
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS layaway_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      layaway_id INTEGER NOT NULL REFERENCES layaways(id) ON DELETE CASCADE,
+      product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+      product_name TEXT NOT NULL,
+      qty REAL NOT NULL DEFAULT 1,
+      unit_price REAL NOT NULL DEFAULT 0
+    );
+  `);
+
   // Seed default admin if none exists
   const userCount = await db.getFirstAsync<{ c: number }>('SELECT COUNT(*) as c FROM users');
   if ((userCount?.c ?? 0) === 0) {
