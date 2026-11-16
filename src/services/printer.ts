@@ -5,7 +5,7 @@
  * Config is persisted in SQLite settings table under key 'printer_config'.
  */
 
-import ThermalPrinter, { PrinterTypes } from 'react-native-thermal-printer';
+import ThermalPrinter from 'react-native-thermal-printer';
 import { getSetting, setSetting } from '../db/settings';
 
 export type PrinterConnectionType = 'bluetooth' | 'wifi' | 'usb' | 'none';
@@ -69,7 +69,9 @@ export const printerService = {
   /** Returns USB devices connected to the Android device */
   getUsbDevices: async (): Promise<UsbDevice[]> => {
     try {
-      const devices = await ThermalPrinter.getUsbDeviceList();
+      const getUsb = (ThermalPrinter as any).getUsbDeviceList;
+      if (!getUsb) throw new Error('USB not supported by this printer library build');
+      const devices = await getUsb();
       return (devices ?? []).map((d: any) => ({
         vendorId: d.vendorId ?? 0,
         productId: d.productId ?? 0,
@@ -112,12 +114,12 @@ export const printerService = {
           });
           break;
 
-        case 'usb':
-          await ThermalPrinter.printUsb({
-            payload: text,
-            printerWidthMM: 80,
-          });
+        case 'usb': {
+          const printUsb = (ThermalPrinter as any).printUsb;
+          if (!printUsb) throw new Error('USB printing not supported by this printer library build');
+          await printUsb({ payload: text, printerWidthMM: 80 });
           break;
+        }
       }
       return { success: true };
     } catch (e: any) {
