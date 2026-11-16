@@ -38,6 +38,8 @@ export default function CreditScreen() {
   const [invoiceVisible, setInvoiceVisible] = useState(false);
   const [selectedInvoiceNo, setSelectedInvoiceNo] = useState<string | null>(null);
   const [debtorSearch, setDebtorSearch] = useState('');
+  type SortKey = 'amount' | 'name' | 'oldest';
+  const [sortBy, setSortBy] = useState<SortKey>('amount');
 
   const { data: summary, refetch: refetchSummary } = useQuery({
     queryKey: ['credit-summary'],
@@ -187,6 +189,18 @@ export default function CreditScreen() {
                   )}
                 </View>
               )}
+              {/* Sort chips */}
+              {debtors.length > 0 && (
+                <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 16, marginBottom: 8 }}>
+                  {(['amount', 'name', 'oldest'] as SortKey[]).map(s => (
+                    <Chip key={s} selected={sortBy === s} onPress={() => setSortBy(s)}
+                      style={[S.tabChip, sortBy === s && { backgroundColor: C.accent + '22' }]}
+                      textStyle={[S.tabText, sortBy === s && { color: C.accent }]} compact>
+                      {s === 'amount' ? 'Most Owed' : s === 'name' ? 'Name' : 'Oldest'}
+                    </Chip>
+                  ))}
+                </View>
+              )}
               {debtors.filter(d => d.name.toLowerCase().includes(debtorSearch.toLowerCase()) || (d.phone ?? '').includes(debtorSearch)).length === 0
                 ? (
                   <View style={S.empty}>
@@ -198,7 +212,16 @@ export default function CreditScreen() {
                 )
                 : (
               <FlatList
-                data={debtors.filter(d => d.name.toLowerCase().includes(debtorSearch.toLowerCase()) || (d.phone ?? '').includes(debtorSearch))}
+                data={debtors
+                  .filter(d => d.name.toLowerCase().includes(debtorSearch.toLowerCase()) || (d.phone ?? '').includes(debtorSearch))
+                  .sort((a, b) => {
+                    if (sortBy === 'amount') return a.credit_balance - b.credit_balance; // most negative first
+                    if (sortBy === 'name') return a.name.localeCompare(b.name);
+                    // oldest: earliest sale date first
+                    if (!a.oldest_sale_date) return 1;
+                    if (!b.oldest_sale_date) return -1;
+                    return a.oldest_sale_date < b.oldest_sale_date ? -1 : 1;
+                  })}
                 keyExtractor={d => String(d.id)}
                 contentContainerStyle={{ padding: 16, gap: 10 }}
                 refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} colors={[C.accent]} />}
