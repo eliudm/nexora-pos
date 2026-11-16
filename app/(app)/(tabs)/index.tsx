@@ -22,6 +22,11 @@ export default function DashboardScreen() {
     queryFn: () => salesQueries.getDailySummary(today),
   });
 
+  const { refetch: refetchCredit } = useQuery({
+    queryKey: ['credit-summary'],
+    queryFn: creditQueries.getSummary,
+  });
+
   const { data: topProducts } = useQuery({
     queryKey: ['top-products', weekStart, today],
     queryFn: () => salesQueries.getTopProducts(weekStart, today, 5),
@@ -47,7 +52,7 @@ export default function DashboardScreen() {
   const { data: expiring = [] } = useQuery({ queryKey: ['alerts-expiry'], queryFn: () => productQueries.getExpiring(30) });
   const alertCount = outOfStock.length + lowStock.length + expiring.length;
 
-  const onRefresh = useCallback(() => { refetchSummary(); }, [refetchSummary]);
+  const onRefresh = useCallback(() => { refetchSummary(); refetchCredit(); }, [refetchSummary, refetchCredit]);
   const fmt = (n: number) => `KES ${(n || 0).toLocaleString('en-KE', { maximumFractionDigits: 0 })}`;
 
   const statCards = [
