@@ -30,6 +30,7 @@ export interface Debtor {
   credit_balance: number;
   credit_limit: number;
   oldest_sale_date: string | null;
+  unpaid_invoices: number;
 }
 
 export const creditQueries = {
@@ -38,7 +39,8 @@ export const creditQueries = {
     return db.getAllAsync<Debtor>(`
       SELECT c.id, c.name, c.phone, c.credit_balance,
              COALESCE(c.credit_limit, 0) as credit_limit,
-             MIN(s.created_at) as oldest_sale_date
+             MIN(s.created_at) as oldest_sale_date,
+             COUNT(s.id) as unpaid_invoices
       FROM customers c
       LEFT JOIN sales s ON s.customer_id = c.id AND s.payment_method = 'CREDIT' AND s.status = 'PAID'
       WHERE c.credit_balance < 0

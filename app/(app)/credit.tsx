@@ -247,7 +247,8 @@ export default function CreditScreen() {
                           <Text style={[S.debtorName, { color: C.text }]}>{item.name}</Text>
                           <Text style={[S.debtorPhone, { color: C.muted }]}>
                             {item.phone ?? 'No phone'}
-                            {daysOld !== null && ` · ${daysOld}d oldest`}
+                            {item.unpaid_invoices > 0 && ` · ${item.unpaid_invoices} invoice${item.unpaid_invoices !== 1 ? 's' : ''}`}
+                            {daysOld !== null && ` · ${daysOld}d old`}
                           </Text>
                         </View>
                         <View style={{ alignItems: 'flex-end' }}>
