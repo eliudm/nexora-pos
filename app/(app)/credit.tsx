@@ -384,14 +384,23 @@ export default function CreditScreen() {
                 {selectedDebtor.name} owes KES {Math.abs(selectedDebtor.credit_balance).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
               </Text>
             )}
-            <TextInput
-              label="Amount (KES)"
-              value={repayAmount}
-              onChangeText={setRepayAmount}
-              keyboardType="numeric"
-              mode="outlined"
-              style={{ marginBottom: 10 }}
-            />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <TextInput
+                label="Amount (KES)"
+                value={repayAmount}
+                onChangeText={setRepayAmount}
+                keyboardType="numeric"
+                mode="outlined"
+                style={{ flex: 1 }}
+              />
+              <Button
+                mode="contained-tonal"
+                compact
+                onPress={() => setRepayAmount(String(Math.abs(selectedDebtor?.credit_balance ?? 0).toFixed(2)))}
+              >
+                Pay Full
+              </Button>
+            </View>
             <Text style={{ color: C.muted, fontSize: 12, marginBottom: 6 }}>Payment Method</Text>
             <RadioButton.Group value={repayMethod} onValueChange={v => setRepayMethod(v as PM)}>
               <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', marginBottom: 10 }}>

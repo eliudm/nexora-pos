@@ -331,14 +331,23 @@ export default function SalesScreen() {
             <Text style={{ color: C.muted, marginBottom: 12 }}>
               Paying against invoice {selected?.invoice_no} for {selected?.customer_name}
             </Text>
-            <TextInput
-              label="Amount (KES)"
-              value={repayAmount}
-              onChangeText={setRepayAmount}
-              keyboardType="numeric"
-              mode="outlined"
-              style={{ marginBottom: 10 }}
-            />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <TextInput
+                label="Amount (KES)"
+                value={repayAmount}
+                onChangeText={setRepayAmount}
+                keyboardType="numeric"
+                mode="outlined"
+                style={{ flex: 1 }}
+              />
+              <Button
+                mode="contained-tonal"
+                compact
+                onPress={() => setRepayAmount(String((selected?.total ?? 0).toFixed(2)))}
+              >
+                Pay Full
+              </Button>
+            </View>
             <Text style={{ color: C.muted, fontSize: 12, marginBottom: 6 }}>Payment Method</Text>
             <RadioButton.Group value={repayMethod} onValueChange={v => setRepayMethod(v as RepayPM)}>
               <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
