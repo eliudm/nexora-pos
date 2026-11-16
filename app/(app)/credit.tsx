@@ -301,24 +301,51 @@ export default function CreditScreen() {
               <MaterialCommunityIcons name="check-circle-outline" size={56} color={C.muted} />
               <Text style={[S.emptyText, { color: C.muted }]}>No aging data</Text>
             </View>
-          ) : (
-            aging.map((row, i) => {
-              const urgent = row.bucket === 'Over 90 days';
-              const warn = row.bucket === '61-90 days';
-              const color = urgent ? '#e53935' : warn ? '#f59e0b' : C.text;
-              return (
-                <View key={i} style={[S.agingRow, { backgroundColor: C.surface, borderColor: C.border }]}>
+          ) : (() => {
+            const bucketColors: Record<string, string> = {
+              '0-30 days': '#22c55e',
+              '31-60 days': '#f59e0b',
+              '61-90 days': '#f97316',
+              'Over 90 days': '#e53935',
+            };
+            const totalAmount = aging.reduce((s, r) => s + r.amount, 0);
+            return (
+              <>
+                {/* Proportional stacked bar */}
+                <View style={{ flexDirection: 'row', height: 10, borderRadius: 6, overflow: 'hidden', marginBottom: 4 }}>
+                  {aging.map((row, i) => (
+                    <View key={i} style={{ flex: row.amount / (totalAmount || 1), backgroundColor: bucketColors[row.bucket] ?? C.muted }} />
+                  ))}
+                </View>
+                {aging.map((row, i) => {
+                  const color = bucketColors[row.bucket] ?? C.text;
+                  const pct = totalAmount > 0 ? ((row.amount / totalAmount) * 100).toFixed(0) : '0';
+                  return (
+                    <View key={i} style={[S.agingRow, { backgroundColor: C.surface, borderColor: C.border }]}>
+                      <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: color, marginRight: 10, marginTop: 4 }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[S.agingBucket, { color }]}>{row.bucket}</Text>
+                        <Text style={[S.agingCount, { color: C.muted }]}>{row.count} debtor{row.count !== 1 ? 's' : ''} · {pct}%</Text>
+                      </View>
+                      <Text style={[S.agingAmount, { color }]}>
+                        KES {row.amount.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                      </Text>
+                    </View>
+                  );
+                })}
+                {/* Totals row */}
+                <View style={[S.agingRow, { backgroundColor: C.elevated, borderColor: C.accent + '44', borderWidth: 1 }]}>
                   <View style={{ flex: 1 }}>
-                    <Text style={[S.agingBucket, { color }]}>{row.bucket}</Text>
-                    <Text style={[S.agingCount, { color: C.muted }]}>{row.count} debtor{row.count !== 1 ? 's' : ''}</Text>
+                    <Text style={[S.agingBucket, { color: C.text, fontWeight: '800' }]}>Total Outstanding</Text>
+                    <Text style={[S.agingCount, { color: C.muted }]}>{aging.reduce((s, r) => s + r.count, 0)} debtors</Text>
                   </View>
-                  <Text style={[S.agingAmount, { color }]}>
-                    KES {row.amount.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                  <Text style={[S.agingAmount, { color: C.accent, fontWeight: '800' }]}>
+                    KES {totalAmount.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
                   </Text>
                 </View>
-              );
-            })
-          )}
+              </>
+            );
+          })()}
         </ScrollView>
       )}
 
@@ -592,6 +619,7 @@ export default function CreditScreen() {
                       credit_balance: 0,
                       credit_limit: 0,
                       oldest_sale_date: null,
+                      unpaid_invoices: 0,
                     });
                   }
                 }}
