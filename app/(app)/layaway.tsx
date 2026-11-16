@@ -248,6 +248,9 @@ export default function LayawayScreen() {
       const result = await layawayQueries.postAsSale(target.id, user?.id ?? null);
       qc.invalidateQueries({ queryKey: ['layaways'] });
       qc.invalidateQueries({ queryKey: ['daily-summary'] });
+      qc.invalidateQueries({ queryKey: ['sales'] });
+      qc.invalidateQueries({ queryKey: ['top-products'] });
+      qc.invalidateQueries({ queryKey: ['top-products-report'] });
       // Close all dialogs first, then handle receipt non-blockingly
       setCompletionOpen(false);
       setDetailLayaway(null);
