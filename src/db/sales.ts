@@ -212,11 +212,11 @@ export const salesQueries = {
   getTopProducts: async (from: string, to: string, limit = 5) => {
     const db = await getDb();
     return db.getAllAsync<{ product_name: string; total_qty: number; total_revenue: number }>(`
-      SELECT si.product_name, SUM(si.qty) as total_qty, SUM(si.total) as total_revenue
+      SELECT MAX(si.product_name) as product_name, SUM(si.qty) as total_qty, SUM(si.total) as total_revenue
       FROM sale_items si
       JOIN sales s ON si.sale_id = s.id
       WHERE date(s.created_at) BETWEEN ? AND ? AND s.status = 'PAID'
-      GROUP BY si.product_name
+      GROUP BY COALESCE(si.product_id, LOWER(TRIM(si.product_name)))
       ORDER BY total_revenue DESC LIMIT ?
     `, [from, to, limit]);
   },
