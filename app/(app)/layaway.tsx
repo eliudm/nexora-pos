@@ -45,6 +45,7 @@ export default function LayawayScreen() {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
+  const [customerKraPin, setCustomerKraPin] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [description, setDescription] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
@@ -84,6 +85,7 @@ export default function LayawayScreen() {
     setCustomerName('');
     setCustomerPhone('');
     setCustomerEmail('');
+    setCustomerKraPin('');
     setSelectedCustomer(null);
     setDescription('');
     setTotalAmount('');
@@ -103,6 +105,7 @@ export default function LayawayScreen() {
           name: customerName.trim(),
           phone: phone || null,
           email: email || null,
+          kra_pin: customerKraPin.trim() || null,
           credit_balance: 0,
         });
         qc.invalidateQueries({ queryKey: ['customers'] });
@@ -394,6 +397,7 @@ export default function LayawayScreen() {
                 <>
                   <TextInput label="Phone Number" value={customerPhone} onChangeText={setCustomerPhone} mode="outlined" style={styles.input} keyboardType="phone-pad" placeholder="e.g. 0712 345 678" />
                   <TextInput label="Email (optional)" value={customerEmail} onChangeText={setCustomerEmail} mode="outlined" style={styles.input} keyboardType="email-address" autoCapitalize="none" />
+                  <TextInput label="KRA PIN (optional)" value={customerKraPin} onChangeText={setCustomerKraPin} mode="outlined" style={styles.input} autoCapitalize="characters" placeholder="e.g. A012345678Z" />
                   {(customerPhone.trim() || customerEmail.trim()) && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                       <MaterialCommunityIcons name="account-plus-outline" size={14} color={C.accent} />

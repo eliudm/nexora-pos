@@ -5,6 +5,7 @@ export interface Customer {
   name: string;
   phone: string | null;
   email: string | null;
+  kra_pin: string | null;
   credit_balance: number;
   credit_limit: number;
   loyalty_points: number;
@@ -29,8 +30,8 @@ export const customerQueries = {
   create: async (data: Omit<Customer, 'id' | 'created_at' | 'loyalty_points' | 'credit_limit'> & { loyalty_points?: number; credit_limit?: number }): Promise<number> => {
     const db = await getDb();
     const r = await db.runAsync(
-      'INSERT INTO customers (name, phone, email, credit_balance) VALUES (?, ?, ?, ?)',
-      [data.name, data.phone, data.email, data.credit_balance],
+      'INSERT INTO customers (name, phone, email, kra_pin, credit_balance) VALUES (?, ?, ?, ?, ?)',
+      [data.name, data.phone ?? null, data.email ?? null, data.kra_pin ?? null, data.credit_balance],
     );
     return r.lastInsertRowId;
   },

@@ -13,7 +13,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import dayjs from 'dayjs';
 
-const EMPTY = { name: '', phone: '', email: '', credit_balance: '0' };
+const EMPTY = { name: '', phone: '', email: '', kra_pin: '', credit_balance: '0' };
 
 export default function CustomersScreen() {
   const qc = useQueryClient();
@@ -53,6 +53,7 @@ export default function CustomersScreen() {
         name: form.name.trim(),
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
+        kra_pin: form.kra_pin.trim() || null,
         credit_balance: parseFloat(form.credit_balance) || 0,
       };
       if (editing) await customerQueries.update(editing.id, data);
@@ -86,7 +87,7 @@ export default function CustomersScreen() {
 
   const openEdit = (c: Customer) => {
     setEditing(c);
-    setForm({ name: c.name, phone: c.phone ?? '', email: c.email ?? '', credit_balance: String(c.credit_balance) });
+    setForm({ name: c.name, phone: c.phone ?? '', email: c.email ?? '', kra_pin: c.kra_pin ?? '', credit_balance: String(c.credit_balance) });
     setDialogOpen(true);
   };
 
@@ -146,6 +147,7 @@ export default function CustomersScreen() {
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={styles.name}>{item.name}</Text>
                 {item.phone && <Text style={styles.sub}>{item.phone}</Text>}
+                {item.kra_pin && <Text style={[styles.sub, { fontSize: 10, color: '#999' }]}>KRA: {item.kra_pin}</Text>}
                 <View style={styles.badgeRow}>
                   {item.credit_balance < 0 && (
                     <Chip compact icon="alert-circle-outline"
@@ -203,6 +205,7 @@ export default function CustomersScreen() {
             <TextInput label="Name *" value={form.name} onChangeText={f('name')} mode="outlined" style={styles.input} />
             <TextInput label="Phone" value={form.phone} onChangeText={f('phone')} mode="outlined" keyboardType="phone-pad" style={styles.input} />
             <TextInput label="Email" value={form.email} onChangeText={f('email')} mode="outlined" keyboardType="email-address" style={styles.input} />
+            <TextInput label="KRA PIN" value={form.kra_pin} onChangeText={f('kra_pin')} mode="outlined" style={styles.input} autoCapitalize="characters" placeholder="e.g. A012345678Z" />
             <TextInput label="Credit Balance (KES)" value={form.credit_balance} onChangeText={f('credit_balance')} mode="outlined" keyboardType="numeric" style={styles.input} />
           </Dialog.Content>
           <Dialog.Actions>

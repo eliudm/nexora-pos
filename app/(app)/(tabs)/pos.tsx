@@ -130,7 +130,7 @@ export default function POSScreen() {
 
   const createCustomerMutation = useMutation({
     mutationFn: (data: { name: string; phone: string; email: string }) =>
-      customerQueries.create({ name: data.name, phone: data.phone || null, email: data.email || null, credit_balance: 0 }),
+      customerQueries.create({ name: data.name, phone: data.phone || null, email: data.email || null, kra_pin: null, credit_balance: 0 }),
     onSuccess: async (newId) => {
       const created = await customerQueries.getById(newId);
       if (created) onCustomerSelected(created);
